@@ -262,16 +262,6 @@
 </head>
 <body>
 
-<!-- Background Sync Indicator -->
-<div id="bg-sync-indicator" style="display:none;position:fixed;bottom:60px;right:16px;z-index:500;background:var(--bg2);border:1px solid var(--border2);border-radius:6px;padding:10px 14px;font-size:10px;letter-spacing:0.1em;color:var(--text2);display:none;align-items:center;gap:8px;max-width:240px">
-  <span class="spinner" style="flex-shrink:0"></span>
-  <div>
-    <div id="bg-sync-status" style="color:var(--text);margin-bottom:2px">Syncing card data...</div>
-    <div style="height:3px;background:var(--bg3);border-radius:2px;overflow:hidden;margin-top:4px">
-      <div id="bg-sync-bar" style="height:100%;background:linear-gradient(90deg,var(--gold),var(--gold2));border-radius:2px;width:0%;transition:width 0.3s ease"></div>
-    </div>
-  </div>
-</div>
 
 <!-- App Shell -->
 <div id="app-shell">
@@ -378,9 +368,9 @@
 
   <div style="margin-top:28px">
     <div class="section-title">DATA SYNC</div>
-    <div id="last-sync-text" style="font-size:10px;color:var(--text2);letter-spacing:0.1em;margin-bottom:12px">Not yet synced</div>
-    <button class="btn-primary" onclick="runBackgroundSync(true)">RESYNC ALL DATA</button>
-    <div style="font-size:9px;color:var(--text3);margin-top:8px;letter-spacing:0.08em">Run this when new sets are released. Takes 5–10 mins.</div>
+    <div id="last-sync-text" style="font-size:10px;color:var(--text2);letter-spacing:0.1em;margin-bottom:12px">Cards cached as you browse — faster each visit.</div>
+    <button class="btn-primary" onclick="clearCardCache()">CLEAR CARD CACHE</button>
+    <div style="font-size:9px;color:var(--text3);margin-top:8px;letter-spacing:0.08em">Forces a fresh fetch next time you open a Pokémon or set.</div>
   </div>
 
   <div style="margin-top:28px">
@@ -593,15 +583,22 @@ async function openModal(pokeId) {
     if (apiKey) headers['X-Api-Key'] = apiKey;
     let cards;
     // Try DB first
-    const syncComplete = await getDBMeta('syncComplete');
-    if (syncComplete && db) {
-      cards = await getPokemonPrintingsFromDB(name);
-    }
-    // Fallback to API
+    if (db) cards = await getPokemonPrintingsFromDB(name);
+    // Fetch from API if not cached
     if (!cards || cards.length === 0) {
       const res = await fetch(`${TCG_BASE}/cards?q=name:"${encodeURIComponent(name)}"&pageSize=250&orderBy=set.releaseDate`, { headers });
       const data = await res.json();
       cards = data.data || [];
+      // Save lean version to DB for next time
+      if (cards.length && db) {
+        const lean = cards.map(c => ({
+          id: c.id, name: c.name, number: c.number,
+          setId: c.set?.id, setName: c.set?.name,
+          image: c.images?.small || null,
+          nationalPokedexNumbers: c.nationalPokedexNumbers || []
+        }));
+        dbPutBulk('cards', lean).catch(() => {});
+      }
     }
     document.getElementById('modal-loading').innerHTML = '';
     renderPrintings(p.id, cards);
@@ -945,16 +942,16 @@ async function loadAllSets() {
   const setsGrid = document.getElementById('sets-grid');
   setsGrid.innerHTML = '<div class="empty-state"><span class="spinner"></span>LOADING SETS...</div>';
   try {
-    // Try DB first
     if (db) {
       const dbSets = await dbGetAll('sets');
       if (dbSets.length) { allSets = dbSets; renderSetsGrid(); return; }
     }
-    // Fallback to API
     const headers = {}; if (apiKey) headers['X-Api-Key'] = apiKey;
     const res = await fetch(`${TCG_BASE}/sets?orderBy=-releaseDate&pageSize=500`, { headers });
     const data = await res.json();
     allSets = data.data || [];
+    // Save to DB for next time
+    if (allSets.length && db) dbPutBulk('sets', allSets).catch(() => {});
     renderSetsGrid();
   } catch {
     setsGrid.innerHTML = '<div class="empty-state" style="color:var(--red)">Failed to load sets. Check connection.</div>';
@@ -1059,11 +1056,8 @@ async function openSetDetail(setId) {
     let cards = setCardsCache[setId];
     if (!cards) {
       // Try DB first
-      const syncComplete = await getDBMeta('syncComplete');
-      if (syncComplete && db) {
-        cards = await getSetCardsFromDB(setId);
-      }
-      // Fallback to API if DB empty for this set
+      if (db) cards = await getSetCardsFromDB(setId);
+      // Fetch from API if not in DB
       if (!cards || cards.length === 0) {
         const headers = {}; if (apiKey) headers['X-Api-Key'] = apiKey;
         cards = [];
@@ -1076,12 +1070,23 @@ async function openSetDetail(setId) {
           if (batch.length < 250) break;
           page++;
         }
+        // Save to DB for next time
+        if (cards.length && db) {
+          const lean = cards.map(c => ({
+            id: c.id, name: c.name, number: c.number,
+            setId: set.id, setName: set.name,
+            image: c.images?.small || null,
+            nationalPokedexNumbers: c.nationalPokedexNumbers || []
+          }));
+          dbPutBulk('cards', lean).catch(() => {});
+          // Also save set metadata
+          dbPutBulk('sets', [set]).catch(() => {});
+        }
       }
       setCardsCache[setId] = cards;
     }
     updateSetDetailProgress(set, cards);
     renderSetCards(set, cards);
-    // Also refresh the sets grid card count
     renderSetsGrid();
   } catch {
     document.getElementById('set-detail-cards').innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:48px;color:var(--red);font-size:11px">Failed to load cards. Check connection.</div>';
@@ -1231,12 +1236,11 @@ async function selectBinderSet(setId) {
     document.getElementById('binder-tbody').innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)"><span class="spinner"></span> Loading set cards...</td></tr>';
     try {
       // Try DB first
-      const syncComplete = await getDBMeta('syncComplete');
-      if (syncComplete && db) {
+      if (db) {
         const dbCards = await getSetCardsFromDB(setId);
-        if (dbCards.length) { setCardsCache[setId] = dbCards; }
+        if (dbCards && dbCards.length) setCardsCache[setId] = dbCards;
       }
-      // Fallback to API
+      // Fetch from API if not in DB
       if (!setCardsCache[setId] || setCardsCache[setId].length === 0) {
         const headers = {}; if (apiKey) headers['X-Api-Key'] = apiKey;
         let cards = [], page = 1;
@@ -1249,6 +1253,16 @@ async function selectBinderSet(setId) {
           page++;
         }
         setCardsCache[setId] = cards;
+        // Save to DB for next time
+        if (cards.length && db) {
+          const lean = cards.map(c => ({
+            id: c.id, name: c.name, number: c.number,
+            setId: set.id, setName: set.name,
+            image: c.images?.small || null,
+            nationalPokedexNumbers: c.nationalPokedexNumbers || []
+          }));
+          dbPutBulk('cards', lean).catch(() => {});
+        }
       }
     } catch {
       document.getElementById('binder-tbody').innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--red)">Failed to load set cards</td></tr>';
@@ -1332,6 +1346,14 @@ function renderStats() {
     <div>Completion: <span class="stats-val">${pct}%</span></div>
   `;
 }
+function clearCardCache() {
+  if (!confirm('Clear cached card data? The app will re-fetch from the API next time you browse. Your collection is not affected.')) return;
+  setCardsCache = {};
+  if (db) dbClear('cards').catch(() => {});
+  showToast('Card cache cleared', 'success');
+}
+
+
 function resetCollection() {
   if (!confirm('Reset entire collection? This cannot be undone.')) return;
   collection = {};
@@ -1369,153 +1391,65 @@ function showToast(msg, type='success') {
   toastTimer = setTimeout(() => { el.className = ''; }, 3000);
 }
 
-// ── Background Sync ───────────────────────────────────────────────────────────
-let syncRunning = false;
-
-function showBgSync(msg, pct) {
-  const el = document.getElementById('bg-sync-indicator');
-  el.style.display = 'flex';
-  document.getElementById('bg-sync-status').textContent = msg;
-  if (pct !== undefined) document.getElementById('bg-sync-bar').style.width = pct + '%';
-}
-function hideBgSync() {
-  document.getElementById('bg-sync-indicator').style.display = 'none';
-}
-
-async function runBackgroundSync(forceFullResync = false) {
-  if (syncRunning) return;
-  syncRunning = true;
-
-  const headers = {};
-  if (apiKey) headers['X-Api-Key'] = apiKey;
-
+// ── Lazy cache helpers ────────────────────────────────────────────────────────
+async function loadFromDB() {
+  // Only preload sets — pokemon list is handled by loadPokemonList
   try {
-    showBgSync('Checking for new sets...', 0);
-
-    // Fetch current set list from API
-    const setsRes = await fetch(`${TCG_BASE}/sets?orderBy=-releaseDate&pageSize=500`, { headers });
-    const setsData = await setsRes.json();
-    const remoteSets = setsData.data || [];
-
-    // Get sets already in DB
-    const localSets = await dbGetAll('sets');
-    const localSetIds = new Set(localSets.map(s => s.id));
-
-    // Determine which sets need syncing
-    let setsToSync = forceFullResync
-      ? remoteSets
-      : remoteSets.filter(s => !localSetIds.has(s.id));
-
-    // Save all set metadata regardless
-    await dbPutBulk('sets', remoteSets);
-    allSets = remoteSets;
-    if (currentView === 'sets') renderSetsGrid();
-
-    if (setsToSync.length === 0) {
-      await setDBMeta('lastSync', new Date().toISOString());
-      await setDBMeta('syncComplete', true);
-      hideBgSync();
-      syncRunning = false;
-      updateLastSyncLabel();
-      return;
-    }
-
-    // Fetch Pokémon list if not in DB
-    const localPoke = await dbGetAll('pokemon');
-    if (localPoke.length === 0 || forceFullResync) {
-      showBgSync('Fetching Pokédex...', 2);
-      try {
-        const pokeRes = await fetch(`${POKEAPI_BASE}/pokemon?limit=${TOTAL}&offset=0`);
-        const pokeData = await pokeRes.json();
-        const pokeItems = pokeData.results.map((p, i) => ({
-          id: i + 1,
-          name: p.name.charAt(0).toUpperCase() + p.name.slice(1).replace(/-/g, ' '),
-          sprite: `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${i + 1}.png`
-        }));
-        await dbPutBulk('pokemon', pokeItems);
-        pokemonList = pokeItems;
-        renderGrid();
-        updateProgress();
-      } catch {}
-    }
-
-    // Sync cards for new/missing sets
-    const total = setsToSync.length;
-    for (let i = 0; i < setsToSync.length; i++) {
-      const set = setsToSync[i];
-      const pct = 5 + (i / total) * 93;
-      showBgSync(`Syncing ${set.name} (${i + 1}/${total})`, pct);
-      try {
-        let cards = [], page = 1;
-        while (true) {
-          const res = await fetch(`${TCG_BASE}/cards?q=set.id:${set.id}&pageSize=250&page=${page}&orderBy=number`, { headers });
-          const data = await res.json();
-          const batch = data.data || [];
-          const lean = batch.map(c => ({
-            id: c.id, name: c.name, number: c.number,
-            setId: set.id, setName: set.name,
-            image: c.images?.small || null,
-            nationalPokedexNumbers: c.nationalPokedexNumbers || []
-          }));
-          await dbPutBulk('cards', lean);
-          cards = cards.concat(lean);
-          if (batch.length < 250) break;
-          page++;
-        }
-        setCardsCache[set.id] = cards;
-      } catch { /* skip failed set */ }
-    }
-
-    await setDBMeta('lastSync', new Date().toISOString());
-    await setDBMeta('syncComplete', true);
-    hideBgSync();
-    updateLastSyncLabel();
-
-    // Refresh sets view if open
-    if (currentView === 'sets') renderSetsGrid();
-
-  } catch (err) {
-    hideBgSync();
-    showToast('Background sync failed', 'error');
-  }
-
-  syncRunning = false;
+    const sets = await dbGetAll('sets');
+    if (sets.length) allSets = sets;
+  } catch {}
 }
 
-function updateLastSyncLabel() {
-  getDBMeta('lastSync').then(ts => {
-    if (!ts) return;
-    const d = new Date(ts);
-    const el = document.getElementById('last-sync-text');
-    if (el) el.textContent = 'Last synced: ' + d.toLocaleDateString() + ' ' + d.toLocaleTimeString();
-  });
+async function getSetCardsFromDB(setId) {
+  if (setCardsCache[setId]) return setCardsCache[setId];
+  try {
+    const all = await dbGetAll('cards');
+    const cards = all.filter(c => c.setId === setId);
+    if (cards.length) { setCardsCache[setId] = cards; return cards; }
+  } catch {}
+  return null;
 }
 
-function abortSync() { /* kept for compatibility */ }
+async function getPokemonPrintingsFromDB(pokemonName) {
+  try {
+    const name = pokemonName.split(' ')[0].toLowerCase();
+    const all = await dbGetAll('cards');
+    const results = all.filter(c => c.name?.toLowerCase().startsWith(name));
+    if (results.length) {
+      const setOrder = {};
+      allSets.forEach((s, i) => setOrder[s.id] = allSets.length - i);
+      results.sort((a, b) => (setOrder[a.setId] || 0) - (setOrder[b.setId] || 0));
+      return results;
+    }
+  } catch {}
+  return null;
+}
 
 // ── Load Pokémon list ─────────────────────────────────────────────────────────
 async function loadPokemonList() {
   document.getElementById('grid').innerHTML = '<div class="empty-state"><span class="spinner"></span>LOADING POKÉDEX...</div>';
   // Try DB first
-  if (pokemonList.length === 0) {
-    try {
-      const items = await dbGetAll('pokemon');
-      if (items.length) pokemonList = items;
-    } catch {}
-  }
-  // Fallback to API if DB empty
-  if (pokemonList.length === 0) {
-    try {
-      const res = await fetch(`${POKEAPI_BASE}/pokemon?limit=${TOTAL}&offset=0`);
-      const data = await res.json();
-      pokemonList = data.results.map((p, i) => ({
-        id: i + 1,
-        name: p.name.charAt(0).toUpperCase() + p.name.slice(1).replace(/-/g, ' '),
-        sprite: `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${i + 1}.png`
-      }));
-    } catch {
-      pokemonList = Array.from({ length: TOTAL }, (_, i) => ({ id: i + 1, name: `Pokémon #${i + 1}`, sprite: null }));
+  try {
+    const items = await dbGetAll('pokemon');
+    if (items.length && items[0].sprite) { // only use DB if sprites are stored
+      pokemonList = items;
+      renderGrid();
+      updateProgress();
+      return;
     }
+  } catch {}
+  // Fetch from API
+  try {
+    const res = await fetch(`${POKEAPI_BASE}/pokemon?limit=${TOTAL}&offset=0`);
+    const data = await res.json();
+    pokemonList = data.results.map((p, i) => ({
+      id: i + 1,
+      name: p.name.charAt(0).toUpperCase() + p.name.slice(1).replace(/-/g, ' '),
+      sprite: `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${i + 1}.png`
+    }));
+    dbPutBulk('pokemon', pokemonList).catch(() => {});
+  } catch {
+    pokemonList = Array.from({ length: TOTAL }, (_, i) => ({ id: i + 1, name: `Pokémon #${i + 1}`, sprite: null }));
   }
   renderGrid();
   updateProgress();
@@ -1526,27 +1460,13 @@ async function init() {
   loadData();
   loadSetsMeta();
   await openDB();
-
-  // Always show app immediately
-  document.getElementById('app-shell').style.display = 'block';
-
-  // Load whatever we have locally first
   await loadFromDB();
   await loadPokemonList();
-  updateLastSyncLabel();
-
-  // Check if we should sync (first time, or once per day)
-  const lastSync = await getDBMeta('lastSync');
-  const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
-  const shouldSync = !lastSync || new Date(lastSync).getTime() < oneDayAgo;
-
-  if (shouldSync) {
-    // Small delay so app renders first
-    setTimeout(() => runBackgroundSync(false), 2000);
-  }
 }
 
 init();
+
+
 
 const DB_NAME = 'sgc_tcg_db';
 const DB_VERSION = 1;
