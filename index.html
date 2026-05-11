@@ -337,9 +337,21 @@
     </div>
     <div class="binder-info" id="binder-info">3×3 = 9 cards/page</div>
   </div>
+  <div style="display:flex;gap:8px;padding:0 0 14px;flex-wrap:wrap;align-items:center">
+    <div style="display:flex;gap:0;border:1px solid var(--border2);border-radius:3px;overflow:hidden;flex-shrink:0">
+      <button id="binder-mode-dex" onclick="setBinderMode('dex')" style="padding:6px 14px;font-size:10px;letter-spacing:.15em;font-family:var(--mono);background:var(--gold);color:var(--bg);border:none;cursor:pointer">DEX</button>
+      <button id="binder-mode-set" onclick="setBinderMode('set')" style="padding:6px 14px;font-size:10px;letter-spacing:.15em;font-family:var(--mono);background:transparent;color:var(--text2);border:none;cursor:pointer;border-left:1px solid var(--border2)">SET</button>
+    </div>
+    <div id="binder-set-search-wrap" style="display:none;flex:1;min-width:180px;position:relative">
+      <input id="binder-set-search" type="text" placeholder="Search sets..." oninput="renderBinderSetDropdown()"
+        style="width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:3px;padding:7px 12px;color:var(--text);font-family:var(--mono);font-size:11px;outline:none"/>
+      <div id="binder-set-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg2);border:1px solid var(--border2);border-radius:0 0 4px 4px;z-index:50;max-height:200px;overflow-y:auto"></div>
+    </div>
+    <div id="binder-selected-set-label" style="display:none;font-size:10px;color:var(--gold);letter-spacing:.1em"></div>
+  </div>
   <div id="binder-table-wrap">
     <table id="binder-table">
-      <thead><tr><th>#</th><th>POKÉMON</th><th>OWNED</th><th>PAGE</th><th>SLOT</th></tr></thead>
+      <thead><tr id="binder-thead-row"><th>#</th><th>POKÉMON</th><th>OWNED</th><th>PAGE</th><th>SLOT</th></tr></thead>
       <tbody id="binder-tbody"></tbody>
     </table>
   </div>
@@ -1012,9 +1024,16 @@ async function openSetDetail(setId) {
     let cards = setCardsCache[setId];
     if (!cards) {
       const headers = {}; if (apiKey) headers['X-Api-Key'] = apiKey;
-      const res = await fetch(`${TCG_BASE}/cards?q=set.id:${setId}&pageSize=500&orderBy=number`, { headers });
-      const data = await res.json();
-      cards = data.data || [];
+      cards = [];
+      let page = 1;
+      while (true) {
+        const res = await fetch(`${TCG_BASE}/cards?q=set.id:${setId}&pageSize=250&page=${page}&orderBy=number`, { headers });
+        const data = await res.json();
+        const batch = data.data || [];
+        cards = cards.concat(batch);
+        if (batch.length < 250) break; // last page
+        page++;
+      }
       setCardsCache[setId] = cards;
     }
     updateSetDetailProgress(set, cards);
@@ -1111,29 +1130,138 @@ function closeSetDetail() {
 }
 
 // ── Binder ───────────────────────────────────────────────────────────────────
+let binderMode = 'dex'; // 'dex' | 'set'
+let binderSelectedSet = null; // { id, name, cards[] }
+
+function setBinderMode(mode) {
+  binderMode = mode;
+  const dexBtn = document.getElementById('binder-mode-dex');
+  const setBtn = document.getElementById('binder-mode-set');
+  const setSearchWrap = document.getElementById('binder-set-search-wrap');
+  const selectedLabel = document.getElementById('binder-selected-set-label');
+
+  if (mode === 'dex') {
+    dexBtn.style.background = 'var(--gold)'; dexBtn.style.color = 'var(--bg)';
+    setBtn.style.background = 'transparent'; setBtn.style.color = 'var(--text2)';
+    setSearchWrap.style.display = 'none';
+    selectedLabel.style.display = 'none';
+    document.getElementById('binder-thead-row').innerHTML = '<th>#</th><th>POKÉMON</th><th>OWNED</th><th>PAGE</th><th>SLOT</th>';
+  } else {
+    setBtn.style.background = 'var(--gold)'; setBtn.style.color = 'var(--bg)';
+    dexBtn.style.background = 'transparent'; dexBtn.style.color = 'var(--text2)';
+    setSearchWrap.style.display = 'block';
+    // Load sets if not yet loaded
+    if (allSets.length === 0) loadAllSets().then(() => renderBinderSetDropdown());
+    document.getElementById('binder-thead-row').innerHTML = '<th>#</th><th>CARD</th><th>OWNED</th><th>PAGE</th><th>SLOT</th>';
+  }
+  renderBinder();
+}
+
+function renderBinderSetDropdown() {
+  const q = document.getElementById('binder-set-search').value.toLowerCase();
+  const dropdown = document.getElementById('binder-set-dropdown');
+  if (!q) { dropdown.style.display = 'none'; return; }
+
+  const matches = allSets.filter(s => s.name.toLowerCase().includes(q) || (s.series||'').toLowerCase().includes(q)).slice(0, 20);
+  if (matches.length === 0) { dropdown.style.display = 'none'; return; }
+
+  dropdown.style.display = 'block';
+  dropdown.innerHTML = matches.map(s => `
+    <div onclick="selectBinderSet('${s.id}')"
+      style="padding:8px 12px;cursor:pointer;font-size:10px;letter-spacing:.08em;border-bottom:1px solid var(--border);transition:background .1s"
+      onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background=''"
+    >${s.name} <span style="color:var(--text3);font-size:9px">· ${s.releaseDate||''}</span></div>
+  `).join('');
+}
+
+async function selectBinderSet(setId) {
+  const set = allSets.find(s => s.id === setId);
+  if (!set) return;
+
+  document.getElementById('binder-set-search').value = set.name;
+  document.getElementById('binder-set-dropdown').style.display = 'none';
+  document.getElementById('binder-selected-set-label').textContent = set.name.toUpperCase();
+  document.getElementById('binder-selected-set-label').style.display = 'block';
+
+  // Load cards if not cached
+  if (!setCardsCache[setId]) {
+    document.getElementById('binder-tbody').innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)"><span class="spinner"></span> Loading set cards...</td></tr>';
+    try {
+      const headers = {}; if (apiKey) headers['X-Api-Key'] = apiKey;
+      let cards = [], page = 1;
+      while (true) {
+        const res = await fetch(`${TCG_BASE}/cards?q=set.id:${setId}&pageSize=250&page=${page}&orderBy=number`, { headers });
+        const data = await res.json();
+        const batch = data.data || [];
+        cards = cards.concat(batch);
+        if (batch.length < 250) break;
+        page++;
+      }
+      setCardsCache[setId] = cards;
+    } catch {
+      document.getElementById('binder-tbody').innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--red)">Failed to load set cards</td></tr>';
+      return;
+    }
+  }
+  binderSelectedSet = { id: setId, name: set.name, cards: setCardsCache[setId] };
+  renderBinder();
+}
+
 function renderBinder() {
   const cols = parseInt(document.getElementById('binder-cols').value);
   const rows = parseInt(document.getElementById('binder-rows').value);
   const perPage = cols * rows;
   document.getElementById('binder-info').textContent = cols + '×' + rows + ' = ' + perPage + ' cards/page';
-
-  const ownedPokemon = pokemonList.filter(p => isOwned(p.id));
   const tbody = document.getElementById('binder-tbody');
-  if (ownedPokemon.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text3)">No cards owned yet</td></tr>';
-    return;
+
+  if (binderMode === 'dex') {
+    const ownedPokemon = pokemonList.filter(p => isOwned(p.id));
+    if (ownedPokemon.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text3)">No cards owned yet</td></tr>';
+      return;
+    }
+    tbody.innerHTML = ownedPokemon.map(p => {
+      const slotIndex = p.id - 1; // fixed by dex number
+      const page = Math.floor(slotIndex / perPage) + 1;
+      const slot = (slotIndex % perPage) + 1;
+      return `<tr>
+        <td style="color:var(--text3)">#${String(p.id).padStart(4,'0')}</td>
+        <td style="color:var(--text)">${p.name}</td>
+        <td style="color:var(--green)">✓ ${getOwned(p.id).length} card${getOwned(p.id).length !== 1 ? 's' : ''}</td>
+        <td style="color:var(--gold)">${page}</td>
+        <td style="color:var(--text2)">${slot}</td>
+      </tr>`;
+    }).join('');
+
+  } else {
+    // Set mode
+    if (!binderSelectedSet) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text3)">Search and select a set above</td></tr>';
+      return;
+    }
+    const cards = binderSelectedSet.cards;
+    // Sort numerically by card number (same as set detail view)
+    const sorted = [...cards].sort((a, b) => {
+      const numA = parseInt((a.number || '').replace(/\D/g, '')) || 0;
+      const numB = parseInt((b.number || '').replace(/\D/g, '')) || 0;
+      if (numA !== numB) return numA - numB;
+      return (a.number || '').localeCompare(b.number || '');
+    });
+
+    // Fixed slot = card's position in the sorted full set list (0-based)
+    tbody.innerHTML = sorted.map((card, slotIndex) => {
+      const owned = isCardOwnedInSet(card.id);
+      const page = Math.floor(slotIndex / perPage) + 1;
+      const slot = (slotIndex % perPage) + 1;
+      return `<tr style="${owned ? '' : 'opacity:0.45'}">
+        <td style="color:var(--text3)">#${card.number || '?'}</td>
+        <td style="color:${owned ? 'var(--text)' : 'var(--text3)'}">${card.name}</td>
+        <td style="color:${owned ? 'var(--green)' : 'var(--text3)'}">${owned ? '✓ OWNED' : '—'}</td>
+        <td style="color:var(--gold)">${page}</td>
+        <td style="color:var(--text2)">${slot}</td>
+      </tr>`;
+    }).join('');
   }
-  tbody.innerHTML = ownedPokemon.map((p, i) => {
-    const page = Math.floor(i / perPage) + 1;
-    const slot = (i % perPage) + 1;
-    return `<tr>
-      <td style="color:var(--text3)">#${String(p.id).padStart(4,'0')}</td>
-      <td style="color:var(--text)">${p.name}</td>
-      <td style="color:var(--green)">✓ ${getOwned(p.id).length} card${getOwned(p.id).length !== 1 ? 's' : ''}</td>
-      <td style="color:var(--gold)">${page}</td>
-      <td style="color:var(--text2)">${slot}</td>
-    </tr>`;
-  }).join('');
 }
 
 // ── Settings ─────────────────────────────────────────────────────────────────
