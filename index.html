@@ -582,15 +582,17 @@ async function openModal(pokeId) {
     if (fromDB.length > 250) {
       cards = fromDB;
     } else {
-      // Paginate through all results
+      // Paginate using totalCount from response
       cards = [];
       let page = 1;
+      let totalCount = null;
       while (true) {
         const res = await fetch(`${TCG_BASE}/cards?q=name:"${encodeURIComponent(name)}"&pageSize=250&page=${page}&orderBy=set.releaseDate`, { headers });
         const data = await res.json();
         const batch = data.data || [];
+        if (totalCount === null) totalCount = data.totalCount || 0;
         cards = cards.concat(batch);
-        if (batch.length < 250) break;
+        if (cards.length >= totalCount || batch.length === 0) break;
         page++;
       }
       // Save lean version to DB
@@ -860,12 +862,14 @@ async function showPrintingsPicker(pokeId) {
     const headers = {}; if (apiKey) headers['X-Api-Key'] = apiKey;
     let cards = [];
     let page = 1;
+    let totalCount = null;
     while (true) {
       const res = await fetch(`${TCG_BASE}/cards?q=name:"${encodeURIComponent(p.name.split(' ')[0])}"&pageSize=250&page=${page}&orderBy=set.releaseDate`, { headers });
       const data = await res.json();
       const batch = data.data || [];
+      if (totalCount === null) totalCount = data.totalCount || 0;
       cards = cards.concat(batch);
-      if (batch.length < 250) break;
+      if (cards.length >= totalCount || batch.length === 0) break;
       page++;
     }
     const ownedIds = new Set(getOwned(p.id).map(c => c.id));
@@ -1033,12 +1037,14 @@ async function openSetDetail(setId) {
         const headers = {}; if (apiKey) headers['X-Api-Key'] = apiKey;
         cards = [];
         let page = 1;
+        let totalCount = null;
         while (true) {
           const res = await fetch(`${TCG_BASE}/cards?q=set.id:${setId}&pageSize=250&page=${page}&orderBy=number`, { headers });
           const data = await res.json();
           const batch = data.data || [];
+          if (totalCount === null) totalCount = data.totalCount || 0;
           cards = cards.concat(batch);
-          if (batch.length < 250) break;
+          if (cards.length >= totalCount || batch.length === 0) break;
           page++;
         }
         const lean = cards.map(c => ({ id: c.id, name: c.name, number: c.number, setId: set.id, setName: set.name, image: c.images?.small || null }));
@@ -1170,13 +1176,14 @@ async function selectBinderSet(setId) {
         setCardsCache[setId] = fromDB;
       } else {
         const headers = {}; if (apiKey) headers['X-Api-Key'] = apiKey;
-        let cards = [], page = 1;
+        let cards = [], page = 1, totalCount = null;
         while (true) {
           const res = await fetch(`${TCG_BASE}/cards?q=set.id:${setId}&pageSize=250&page=${page}&orderBy=number`, { headers });
           const data = await res.json();
           const batch = data.data || [];
+          if (totalCount === null) totalCount = data.totalCount || 0;
           cards = cards.concat(batch);
-          if (batch.length < 250) break;
+          if (cards.length >= totalCount || batch.length === 0) break;
           page++;
         }
         setCardsCache[setId] = cards;
