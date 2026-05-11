@@ -1031,30 +1031,17 @@ async function openSetDetail(setId) {
     let cards = setCardsCache[setId];
     if (!cards) {
       const headers = {}; if (apiKey) headers['X-Api-Key'] = apiKey;
-      // First check API for totalCount
-      const checkRes = await fetch(`${TCG_BASE}/cards?q=set.id:${setId}&pageSize=1`, { headers });
-      const checkData = await checkRes.json();
-      const totalCount = checkData.totalCount || 0;
-      // Check DB — only trust if count exactly matches
-      const cached = await dbGetAll('cards');
-      const fromDB = cached.filter(c => c.setId === setId);
-      if (totalCount > 0 && fromDB.length >= totalCount) {
-        cards = fromDB;
-      } else {
-        // Full paginated fetch
-        cards = [];
-        let page = 1;
-        while (true) {
-          const res = await fetch(`${TCG_BASE}/cards?q=set.id:${setId}&pageSize=250&page=${page}&orderBy=number`, { headers });
-          const data = await res.json();
-          const batch = data.data || [];
-          cards = cards.concat(batch);
-          if (batch.length === 0 || cards.length >= totalCount) break;
-          page++;
-        }
-        // Save full set to DB
-        const lean = cards.map(c => ({ id: c.id, name: c.name, number: c.number, setId: set.id, setName: set.name, image: c.images?.small || null }));
-        dbPutBulk('cards', lean);
+      cards = [];
+      let page = 1;
+      let totalCount = Infinity;
+      while (cards.length < totalCount) {
+        const res = await fetch(`${TCG_BASE}/cards?q=set.id:${setId}&pageSize=250&page=${page}&orderBy=number`, { headers });
+        const data = await res.json();
+        totalCount = data.totalCount || 0;
+        const batch = data.data || [];
+        if (batch.length === 0) break;
+        cards = cards.concat(batch);
+        page++;
       }
       setCardsCache[setId] = cards;
     }
@@ -1179,27 +1166,17 @@ async function selectBinderSet(setId) {
     document.getElementById('binder-tbody').innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)"><span class="spinner"></span> Loading...</td></tr>';
     try {
       const headers = {}; if (apiKey) headers['X-Api-Key'] = apiKey;
-      const checkRes = await fetch(`${TCG_BASE}/cards?q=set.id:${setId}&pageSize=1`, { headers });
-      const checkData = await checkRes.json();
-      const totalCount = checkData.totalCount || 0;
-      const cached = await dbGetAll('cards');
-      const fromDB = cached.filter(c => c.setId === setId);
-      if (totalCount > 0 && fromDB.length >= totalCount) {
-        setCardsCache[setId] = fromDB;
-      } else {
-        let cards = [], page = 1;
-        while (true) {
-          const res = await fetch(`${TCG_BASE}/cards?q=set.id:${setId}&pageSize=250&page=${page}&orderBy=number`, { headers });
-          const data = await res.json();
-          const batch = data.data || [];
-          cards = cards.concat(batch);
-          if (batch.length === 0 || cards.length >= totalCount) break;
-          page++;
-        }
-        setCardsCache[setId] = cards;
-        const lean = cards.map(c => ({ id: c.id, name: c.name, number: c.number, setId: set.id, setName: set.name, image: c.images?.small || null }));
-        dbPutBulk('cards', lean);
+      let cards = [], page = 1, totalCount = Infinity;
+      while (cards.length < totalCount) {
+        const res = await fetch(`${TCG_BASE}/cards?q=set.id:${setId}&pageSize=250&page=${page}&orderBy=number`, { headers });
+        const data = await res.json();
+        totalCount = data.totalCount || 0;
+        const batch = data.data || [];
+        if (batch.length === 0) break;
+        cards = cards.concat(batch);
+        page++;
       }
+      setCardsCache[setId] = cards;
     } catch {
       document.getElementById('binder-tbody').innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--red)">Failed to load</td></tr>';
       return;
@@ -1275,6 +1252,7 @@ function renderStats() {
 }
 function clearCardCache() {
   if (!confirm('Clear cached card data? Your collection is not affected.')) return;
+  setCardsCache = {};
   dbClearStore('cards');
   dbClearStore('pokemon');
   dbClearStore('sets');
