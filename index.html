@@ -615,12 +615,14 @@ function renderPrintings(pokeId, cards) {
   const ownedIds = new Set(getOwned(pokeId).map(c => c.id));
   const dispId = getDisplay(pokeId) || getOwned(pokeId)[0]?.id;
   document.getElementById('modal-owned-count').textContent = getOwned(pokeId).length + ' printing(s) owned';
-
   if (cards.length === 0) {
     document.getElementById('printings-grid').innerHTML = '<div style="text-align:center;padding:32px;color:var(--text3);font-size:11px">No printings found in API.</div>';
     return;
   }
-  document.getElementById('printings-grid').innerHTML = cards.map(card => {
+  // Deduplicate by card ID
+  const seen = new Set();
+  const unique = cards.filter(c => { if (seen.has(c.id)) return false; seen.add(c.id); return true; });
+  document.getElementById('printings-grid').innerHTML = unique.map(card => {
     const owned = ownedIds.has(card.id);
     const isDisp = card.id === dispId;
     const img = card.images?.small;
@@ -1072,7 +1074,10 @@ function updateSetDetailProgress(set, cards) {
 function renderSetCards(set, cards) {
   const container = document.getElementById('set-detail-cards');
   if (cards.length === 0) { container.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:32px;color:var(--text3);font-size:11px">No cards found.</div>'; return; }
-  const sorted = [...cards].sort((a, b) => {
+  // Deduplicate by card ID
+  const seen = new Set();
+  const unique = cards.filter(c => { if (seen.has(c.id)) return false; seen.add(c.id); return true; });
+  const sorted = unique.sort((a, b) => {
     const nA = parseInt((a.number||'').replace(/\D/g,'')) || 0;
     const nB = parseInt((b.number||'').replace(/\D/g,'')) || 0;
     if (nA !== nB) return nA - nB;
@@ -1222,7 +1227,9 @@ function renderBinder() {
     }).join('');
   } else {
     if (!binderSelectedSet) { tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text3)">Search and select a set above</td></tr>'; return; }
-    const sorted = [...binderSelectedSet.cards].sort((a, b) => {
+    const seen = new Set();
+    const unique = binderSelectedSet.cards.filter(c => { if (seen.has(c.id)) return false; seen.add(c.id); return true; });
+    const sorted = unique.sort((a, b) => {
       const nA = parseInt((a.number||'').replace(/\D/g,'')) || 0;
       const nB = parseInt((b.number||'').replace(/\D/g,'')) || 0;
       if (nA !== nB) return nA - nB;
