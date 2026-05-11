@@ -574,17 +574,25 @@ async function openModal(pokeId) {
     const headers = {};
     if (apiKey) headers['X-Api-Key'] = apiKey;
 
-    // Check DB cache first
+    // Check DB cache first (only trust if > 250, meaning pagination completed)
     let cards = null;
     const cached = await dbGetAll('cards');
     const nameLower = name.toLowerCase();
     const fromDB = cached.filter(c => c.name?.toLowerCase().startsWith(nameLower) && c._source === 'pokemon');
-    if (fromDB.length) {
+    if (fromDB.length > 250) {
       cards = fromDB;
     } else {
-      const res = await fetch(`${TCG_BASE}/cards?q=name:"${encodeURIComponent(name)}"&pageSize=250&orderBy=set.releaseDate`, { headers });
-      const data = await res.json();
-      cards = data.data || [];
+      // Paginate through all results
+      cards = [];
+      let page = 1;
+      while (true) {
+        const res = await fetch(`${TCG_BASE}/cards?q=name:"${encodeURIComponent(name)}"&pageSize=250&page=${page}&orderBy=set.releaseDate`, { headers });
+        const data = await res.json();
+        const batch = data.data || [];
+        cards = cards.concat(batch);
+        if (batch.length < 250) break;
+        page++;
+      }
       // Save lean version to DB
       const lean = cards.map(c => ({
         id: c.id, name: c.name, number: c.number,
@@ -850,9 +858,16 @@ async function showPrintingsPicker(pokeId) {
 
   try {
     const headers = {}; if (apiKey) headers['X-Api-Key'] = apiKey;
-    const res = await fetch(`${TCG_BASE}/cards?q=name:"${encodeURIComponent(p.name.split(' ')[0])}"&pageSize=250&orderBy=set.releaseDate`, { headers });
-    const data = await res.json();
-    const cards = data.data || [];
+    let cards = [];
+    let page = 1;
+    while (true) {
+      const res = await fetch(`${TCG_BASE}/cards?q=name:"${encodeURIComponent(p.name.split(' ')[0])}"&pageSize=250&page=${page}&orderBy=set.releaseDate`, { headers });
+      const data = await res.json();
+      const batch = data.data || [];
+      cards = cards.concat(batch);
+      if (batch.length < 250) break;
+      page++;
+    }
     const ownedIds = new Set(getOwned(p.id).map(c => c.id));
 
     if (cards.length === 0) {
@@ -1011,7 +1026,8 @@ async function openSetDetail(setId) {
     if (!cards) {
       const cached = await dbGetAll('cards');
       const fromDB = cached.filter(c => c.setId === setId);
-      if (fromDB.length) {
+      const expectedTotal = set.total || set.printedTotal || 0;
+      if (fromDB.length && (!expectedTotal || fromDB.length >= expectedTotal)) {
         cards = fromDB;
       } else {
         const headers = {}; if (apiKey) headers['X-Api-Key'] = apiKey;
@@ -1149,7 +1165,8 @@ async function selectBinderSet(setId) {
     try {
       const cached = await dbGetAll('cards');
       const fromDB = cached.filter(c => c.setId === setId);
-      if (fromDB.length) {
+      const expectedTotal = set.total || set.printedTotal || 0;
+      if (fromDB.length && (!expectedTotal || fromDB.length >= expectedTotal)) {
         setCardsCache[setId] = fromDB;
       } else {
         const headers = {}; if (apiKey) headers['X-Api-Key'] = apiKey;
