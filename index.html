@@ -193,6 +193,9 @@
   /* Empty state */
   .empty-state { grid-column: 1/-1; text-align: center; padding: 60px 20px; color: var(--text3); font-size: 11px; letter-spacing: 0.15em; }
 
+  /* Canvas (hidden) */
+  #capture-canvas { display: none; }
+
   /* Sets view */
   #sets-view { display: none; }
   #sets-view.active { display: block; }
@@ -221,8 +224,7 @@
   .set-progress-text { font-size: 8px; color: var(--text2); letter-spacing: 0.08em; display: flex; justify-content: space-between; align-items: center; }
   .set-complete-badge { font-size: 7px; color: var(--green); letter-spacing: 0.12em; }
   .set-pinned-badge { position: absolute; bottom: 5px; right: 8px; font-size: 7px; color: var(--gold); letter-spacing: 0.1em; }
-
-  /* Set detail view */
+  /* Set detail */
   #set-detail { display: none; position: fixed; inset: 0; background: var(--bg); z-index: 80; flex-direction: column; overflow: hidden; }
   #set-detail.open { display: flex; }
   #set-detail-header { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; background: rgba(8,8,16,0.96); flex-shrink: 0; }
@@ -262,9 +264,7 @@
 </head>
 <body>
 
-
-<!-- App Shell -->
-<div id="app-shell">
+<!-- Header -->
 <div id="header">
   <div id="logo">POKÉDEX TCG</div>
   <div id="progress-wrap">
@@ -315,7 +315,7 @@
   <div id="set-detail-cards"></div>
 </div>
 
-
+<!-- Binder View -->
 <div id="binder-view" class="view-section">
   <div class="section-title">BINDER CALCULATOR</div>
   <div class="binder-controls">
@@ -359,6 +359,7 @@
   </div>
 </div>
 
+
 <!-- Settings View -->
 <div id="settings-view" class="view-section">
   <div class="section-title">API CONFIGURATION</div>
@@ -367,13 +368,7 @@
   <button class="btn-primary" onclick="saveApiKey()">SAVE KEY</button>
 
   <div style="margin-top:28px">
-    <div class="section-title">DATA SYNC</div>
-    <div id="last-sync-text" style="font-size:10px;color:var(--text2);letter-spacing:0.1em;margin-bottom:12px">Cards cached as you browse — faster each visit.</div>
-    <button class="btn-primary" onclick="clearCardCache()">CLEAR CARD CACHE</button>
-    <div style="font-size:9px;color:var(--text3);margin-top:8px;letter-spacing:0.08em">Forces a fresh fetch next time you open a Pokémon or set.</div>
-  </div>
-
-  <div style="margin-top:28px">
+    <div class="section-title">EXPORT</div>
     <button class="btn-primary" onclick="exportCSV()">EXPORT CSV</button>
     <button class="btn-secondary" onclick="exportJSON()">EXPORT JSON</button>
   </div>
@@ -385,6 +380,8 @@
 
   <div style="margin-top:28px">
     <div class="section-title">DANGER ZONE</div>
+    <button class="btn-secondary" onclick="clearCardCache()" style="margin-bottom:10px">CLEAR CARD CACHE</button>
+    <div style="font-size:9px;color:var(--text3);margin-bottom:16px;letter-spacing:0.08em">Forces fresh fetch next time you open a Pokémon or set. Collection unaffected.</div>
     <button class="btn-danger" onclick="resetCollection()">RESET COLLECTION</button>
   </div>
 </div>
@@ -409,8 +406,6 @@
     </div>
   </div>
 </div>
-
-</div><!-- /app-shell -->
 
 <!-- Confirm Add Modal -->
 <div id="confirm-overlay">
@@ -528,10 +523,7 @@ function switchView(v) {
   if (v === 'binder') renderBinder();
   if (v === 'settings') renderStats();
   if (v === 'dex') renderGrid();
-  if (v === 'sets') {
-    if (allSets.length === 0) loadAllSets();
-    else renderSetsGrid();
-  }
+  if (v === 'sets') { if (allSets.length === 0) loadAllSets(); else renderSetsGrid(); }
 }
 
 // ── Grid ─────────────────────────────────────────────────────────────────────
@@ -581,24 +573,26 @@ async function openModal(pokeId) {
     const name = p.name.split(' ')[0];
     const headers = {};
     if (apiKey) headers['X-Api-Key'] = apiKey;
-    let cards;
-    // Try DB first
-    if (db) cards = await getPokemonPrintingsFromDB(name);
-    // Fetch from API if not cached
-    if (!cards || cards.length === 0) {
+
+    // Check DB cache first
+    let cards = null;
+    const cached = await dbGetAll('cards');
+    const nameLower = name.toLowerCase();
+    const fromDB = cached.filter(c => c.name?.toLowerCase().startsWith(nameLower) && c._source === 'pokemon');
+    if (fromDB.length) {
+      cards = fromDB;
+    } else {
       const res = await fetch(`${TCG_BASE}/cards?q=name:"${encodeURIComponent(name)}"&pageSize=250&orderBy=set.releaseDate`, { headers });
       const data = await res.json();
       cards = data.data || [];
-      // Save lean version to DB for next time
-      if (cards.length && db) {
-        const lean = cards.map(c => ({
-          id: c.id, name: c.name, number: c.number,
-          setId: c.set?.id, setName: c.set?.name,
-          image: c.images?.small || null,
-          nationalPokedexNumbers: c.nationalPokedexNumbers || []
-        }));
-        dbPutBulk('cards', lean).catch(() => {});
-      }
+      // Save lean version to DB
+      const lean = cards.map(c => ({
+        id: c.id, name: c.name, number: c.number,
+        setId: c.set?.id, setName: c.set?.name,
+        image: c.images?.small || null,
+        _source: 'pokemon'
+      }));
+      dbPutBulk('cards', lean);
     }
     document.getElementById('modal-loading').innerHTML = '';
     renderPrintings(p.id, cards);
@@ -673,15 +667,9 @@ function showConfirm(pokeId, cardId, name, image, set, number, onConfirm) {
 function confirmAdd() {
   if (!pendingCard) return;
   const { pokeId, cardId, name, image, set, number, onConfirm } = pendingCard;
-  if (pokeId) addCard(pokeId, { id: cardId, name, image, set, number });
+  addCard(pokeId, { id: cardId, name, image, set, number });
   showToast(name + ' added!', 'success');
   renderGrid();
-  // Refresh set detail if open
-  if (currentSet && setCardsCache[currentSet.id]) {
-    renderSetCards(currentSet, setCardsCache[currentSet.id]);
-    updateSetDetailProgress(currentSet, setCardsCache[currentSet.id]);
-    renderSetsGrid();
-  }
   if (onConfirm) onConfirm(pokeId, cardId, name, image, set, number);
   closeConfirm();
 }
@@ -914,12 +902,10 @@ function showAddResults() {
 }
 
 // ── Sets ──────────────────────────────────────────────────────────────────────
-const SETS_STORAGE = 'sgc_sets_meta';      // { pinned: [], hidden: [] }
-const SET_CARDS_STORAGE = 'sgc_set_cards'; // { setId: [cardIds owned] }
-
+const SETS_STORAGE = 'sgc_sets_meta';
 let allSets = [];
 let setsMeta = { pinned: [], hidden: [] };
-let setCardsCache = {}; // setId -> full card list from API
+let setCardsCache = {};
 let showHidden = false;
 let currentSet = null;
 
@@ -928,11 +914,9 @@ function loadSetsMeta() {
 }
 function saveSetsMeta() { localStorage.setItem(SETS_STORAGE, JSON.stringify(setsMeta)); }
 
-// Check if a card is owned in a set (by card id stored in main collection)
 function isCardOwnedInSet(cardId) {
   return Object.values(collection).some(p => p.owned?.some(c => c.id === cardId));
 }
-
 function getSetOwnedCount(setId, cards) {
   if (!cards) return 0;
   return cards.filter(c => isCardOwnedInSet(c.id)).length;
@@ -942,16 +926,10 @@ async function loadAllSets() {
   const setsGrid = document.getElementById('sets-grid');
   setsGrid.innerHTML = '<div class="empty-state"><span class="spinner"></span>LOADING SETS...</div>';
   try {
-    if (db) {
-      const dbSets = await dbGetAll('sets');
-      if (dbSets.length) { allSets = dbSets; renderSetsGrid(); return; }
-    }
     const headers = {}; if (apiKey) headers['X-Api-Key'] = apiKey;
     const res = await fetch(`${TCG_BASE}/sets?orderBy=-releaseDate&pageSize=500`, { headers });
     const data = await res.json();
     allSets = data.data || [];
-    // Save to DB for next time
-    if (allSets.length && db) dbPutBulk('sets', allSets).catch(() => {});
     renderSetsGrid();
   } catch {
     setsGrid.innerHTML = '<div class="empty-state" style="color:var(--red)">Failed to load sets. Check connection.</div>';
@@ -961,44 +939,34 @@ async function loadAllSets() {
 function renderSetsGrid() {
   const q = document.getElementById('sets-search').value.toLowerCase();
   const setsGrid = document.getElementById('sets-grid');
-
   let sets = allSets.filter(s => {
     if (!showHidden && setsMeta.hidden.includes(s.id)) return false;
     if (q && !s.name.toLowerCase().includes(q) && !s.series?.toLowerCase().includes(q)) return false;
     return true;
   });
-
-  // Pinned float to top
   const pinned = sets.filter(s => setsMeta.pinned.includes(s.id));
   const rest = sets.filter(s => !setsMeta.pinned.includes(s.id));
   sets = [...pinned, ...rest];
-
-  if (sets.length === 0) {
-    setsGrid.innerHTML = '<div class="empty-state">NO SETS FOUND</div>';
-    return;
-  }
-
+  if (sets.length === 0) { setsGrid.innerHTML = '<div class="empty-state">NO SETS FOUND</div>'; return; }
   setsGrid.innerHTML = sets.map(s => {
     const isPinned = setsMeta.pinned.includes(s.id);
-    const isHidden = setsMeta.hidden.includes(s.id);
     const cachedCards = setCardsCache[s.id];
     const owned = cachedCards ? getSetOwnedCount(s.id, cachedCards) : 0;
     const total = s.total || s.printedTotal || '?';
     const pct = cachedCards && total !== '?' ? (owned / total * 100) : 0;
     const complete = cachedCards && owned >= total && total !== '?';
-
-    return `<div class="set-card ${complete ? 'complete' : ''} ${isPinned ? 'pinned' : ''}" onclick="openSetDetail('${s.id}')">
+    return `<div class="set-card ${complete?'complete':''} ${isPinned?'pinned':''}" onclick="openSetDetail('${s.id}')">
       <div class="set-card-logo-wrap">
         ${s.images?.logo ? `<img class="set-card-logo" src="${s.images.logo}" alt="${s.name}" loading="lazy" onerror="this.style.display='none'">` : `<div class="set-card-logo-placeholder">🃏</div>`}
-        <button class="set-pin-btn ${isPinned ? 'pinned' : ''}" onclick="event.stopPropagation();togglePin('${s.id}')" title="${isPinned ? 'Unpin' : 'Pin'}">📌</button>
-        <button class="set-hide-btn" onclick="event.stopPropagation();toggleHide('${s.id}')" title="${isHidden ? 'Unhide' : 'Hide'}">✕</button>
+        <button class="set-pin-btn ${isPinned?'pinned':''}" onclick="event.stopPropagation();togglePin('${s.id}')" title="${isPinned?'Unpin':'Pin'}">📌</button>
+        <button class="set-hide-btn" onclick="event.stopPropagation();toggleHide('${s.id}')" title="Hide">✕</button>
       </div>
       <div class="set-card-body">
         <div class="set-card-name">${s.name}</div>
-        <div class="set-card-meta">${s.series || ''} · ${s.releaseDate || ''}</div>
+        <div class="set-card-meta">${s.series||''} · ${s.releaseDate||''}</div>
         <div class="set-progress-bar"><div class="set-progress-fill" style="width:${pct}%"></div></div>
         <div class="set-progress-text">
-          <span>${cachedCards ? owned + ' / ' + total : '— / ' + total}</span>
+          <span>${cachedCards ? owned+' / '+total : '— / '+total}</span>
           ${complete ? '<span class="set-complete-badge">✓ COMPLETE</span>' : ''}
         </div>
       </div>
@@ -1009,25 +977,15 @@ function renderSetsGrid() {
 
 function togglePin(setId) {
   const idx = setsMeta.pinned.indexOf(setId);
-  if (idx > -1) setsMeta.pinned.splice(idx, 1);
-  else setsMeta.pinned.push(setId);
-  saveSetsMeta();
-  renderSetsGrid();
+  if (idx > -1) setsMeta.pinned.splice(idx, 1); else setsMeta.pinned.push(setId);
+  saveSetsMeta(); renderSetsGrid();
 }
-
 function toggleHide(setId) {
   const idx = setsMeta.hidden.indexOf(setId);
   if (idx > -1) setsMeta.hidden.splice(idx, 1);
-  else {
-    setsMeta.hidden.push(setId);
-    // Also unpin if hiding
-    const pinIdx = setsMeta.pinned.indexOf(setId);
-    if (pinIdx > -1) setsMeta.pinned.splice(pinIdx, 1);
-  }
-  saveSetsMeta();
-  renderSetsGrid();
+  else { setsMeta.hidden.push(setId); const pi = setsMeta.pinned.indexOf(setId); if (pi > -1) setsMeta.pinned.splice(pi, 1); }
+  saveSetsMeta(); renderSetsGrid();
 }
-
 function toggleShowHidden() {
   showHidden = !showHidden;
   const btn = document.getElementById('sets-show-hidden-btn');
@@ -1040,25 +998,22 @@ async function openSetDetail(setId) {
   const set = allSets.find(s => s.id === setId);
   if (!set) return;
   currentSet = set;
-
   document.getElementById('set-detail-name').textContent = set.name.toUpperCase();
-  document.getElementById('set-detail-meta').textContent = (set.series || '') + (set.releaseDate ? '  ·  ' + set.releaseDate : '');
+  document.getElementById('set-detail-meta').textContent = (set.series||'') + (set.releaseDate ? '  ·  '+set.releaseDate : '');
   const logoEl = document.getElementById('set-detail-logo');
-  if (set.images?.logo) { logoEl.src = set.images.logo; logoEl.style.display = 'block'; }
-  else logoEl.style.display = 'none';
-
+  if (set.images?.logo) { logoEl.src = set.images.logo; logoEl.style.display = 'block'; } else logoEl.style.display = 'none';
   document.getElementById('set-detail').classList.add('open');
   document.body.style.overflow = 'hidden';
   document.getElementById('set-detail-cards').innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:48px;color:var(--text3);font-size:11px;letter-spacing:.15em"><span class="spinner"></span>LOADING CARDS...</div>';
   updateSetDetailProgress(set, []);
-
   try {
     let cards = setCardsCache[setId];
     if (!cards) {
-      // Try DB first
-      if (db) cards = await getSetCardsFromDB(setId);
-      // Fetch from API if not in DB
-      if (!cards || cards.length === 0) {
+      const cached = await dbGetAll('cards');
+      const fromDB = cached.filter(c => c.setId === setId);
+      if (fromDB.length) {
+        cards = fromDB;
+      } else {
         const headers = {}; if (apiKey) headers['X-Api-Key'] = apiKey;
         cards = [];
         let page = 1;
@@ -1070,18 +1025,8 @@ async function openSetDetail(setId) {
           if (batch.length < 250) break;
           page++;
         }
-        // Save to DB for next time
-        if (cards.length && db) {
-          const lean = cards.map(c => ({
-            id: c.id, name: c.name, number: c.number,
-            setId: set.id, setName: set.name,
-            image: c.images?.small || null,
-            nationalPokedexNumbers: c.nationalPokedexNumbers || []
-          }));
-          dbPutBulk('cards', lean).catch(() => {});
-          // Also save set metadata
-          dbPutBulk('sets', [set]).catch(() => {});
-        }
+        const lean = cards.map(c => ({ id: c.id, name: c.name, number: c.number, setId: set.id, setName: set.name, image: c.images?.small || null }));
+        dbPutBulk('cards', lean);
       }
       setCardsCache[setId] = cards;
     }
@@ -1104,26 +1049,22 @@ function updateSetDetailProgress(set, cards) {
 
 function renderSetCards(set, cards) {
   const container = document.getElementById('set-detail-cards');
-  if (cards.length === 0) {
-    container.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:32px;color:var(--text3);font-size:11px">No cards found for this set.</div>';
-    return;
-  }
-  // Sort numerically — handles "001", "10", "GG01", "TG15" etc.
+  if (cards.length === 0) { container.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:32px;color:var(--text3);font-size:11px">No cards found.</div>'; return; }
   const sorted = [...cards].sort((a, b) => {
-    const numA = parseInt((a.number || '').replace(/\D/g, '')) || 0;
-    const numB = parseInt((b.number || '').replace(/\D/g, '')) || 0;
-    if (numA !== numB) return numA - numB;
-    return (a.number || '').localeCompare(b.number || '');
+    const nA = parseInt((a.number||'').replace(/\D/g,'')) || 0;
+    const nB = parseInt((b.number||'').replace(/\D/g,'')) || 0;
+    if (nA !== nB) return nA - nB;
+    return (a.number||'').localeCompare(b.number||'');
   });
   container.innerHTML = sorted.map(card => {
     const owned = isCardOwnedInSet(card.id);
-    const img = card.images?.small;
-    return `<div class="set-card-item ${owned ? 'owned' : ''}" id="sci-${card.id}"
+    const img = card.image || card.images?.small;
+    return `<div class="set-card-item ${owned?'owned':''}" id="sci-${card.id}"
       onclick="${owned ? `removeSetCard('${set.id}','${card.id}')` : `confirmSetCard('${set.id}','${card.id}','${(card.name||'').replace(/'/g,"\\'")}','${img||''}','${(set.name||'').replace(/'/g,"\\'")}','${card.number||''}')`}"
-      title="${owned ? 'Click to remove' : 'Click to add'}">
+      title="${owned?'Click to remove':'Click to add'}">
       ${owned ? '<div class="set-owned-dot"></div>' : '<div class="set-lock">🔒</div>'}
-      <div class="set-card-item-num">#${card.number || '?'}</div>
-      ${img ? `<img src="${img}" alt="${card.name}" class="${owned ? '' : 'locked-img'}" loading="lazy">` : `<div style="width:100%;aspect-ratio:2.5/3.5;background:var(--bg3);border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:24px;opacity:.15">🃏</div>`}
+      <div class="set-card-item-num">#${card.number||'?'}</div>
+      ${img ? `<img src="${img}" alt="${card.name}" class="${owned?'':'locked-img'}" loading="lazy">` : `<div style="width:100%;aspect-ratio:2.5/3.5;background:var(--bg3);border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:24px;opacity:.15">🃏</div>`}
       <div class="set-card-item-name">${card.name}</div>
       ${owned ? `<button class="set-remove-btn" onclick="event.stopPropagation();removeSetCard('${set.id}','${card.id}')">REMOVE</button>` : ''}
     </div>`;
@@ -1131,43 +1072,22 @@ function renderSetCards(set, cards) {
 }
 
 function confirmSetCard(setId, cardId, name, image, setName, number) {
-  // Find the pokemon id for this card
   const pokeId = findPokeIdFromCardName(name) || 0;
-  showConfirm(pokeId, cardId, name, image, setName, number, (pid) => {
-    // If we found a matching pokemon, it was already added to collection via confirmAdd
-    // If not (trainer cards etc), add a placeholder to collection under id 0
-    if (!pid || pid === 0) {
-      // Store trainer/energy cards under a special key
+  showConfirm(pokeId, cardId, name, image, setName, number, () => {
+    if (!pokeId) {
       if (!collection['_misc']) collection['_misc'] = { owned: [], display: null };
-      if (!collection['_misc'].owned.find(c => c.id === cardId)) {
-        collection['_misc'].owned.push({ id: cardId, name, image, set: setName, number });
-        saveData();
-      }
+      if (!collection['_misc'].owned.find(c => c.id === cardId)) { collection['_misc'].owned.push({ id: cardId, name, image, set: setName, number }); saveData(); }
     }
-    // Refresh set detail UI
     const cards = setCardsCache[setId];
-    if (cards) {
-      renderSetCards(currentSet, cards);
-      updateSetDetailProgress(currentSet, cards);
-      renderSetsGrid();
-    }
+    if (cards && currentSet) { renderSetCards(currentSet, cards); updateSetDetailProgress(currentSet, cards); renderSetsGrid(); }
   });
 }
 
 function removeSetCard(setId, cardId) {
-  // Remove from all pokemon in collection
-  Object.keys(collection).forEach(pid => {
-    if (collection[pid]?.owned?.some(c => c.id === cardId)) {
-      removeCard(pid, cardId);
-    }
-  });
+  Object.keys(collection).forEach(pid => { if (collection[pid]?.owned?.some(c => c.id === cardId)) removeCard(pid, cardId); });
   renderGrid();
   const cards = setCardsCache[setId];
-  if (cards && currentSet) {
-    renderSetCards(currentSet, cards);
-    updateSetDetailProgress(currentSet, cards);
-    renderSetsGrid();
-  }
+  if (cards && currentSet) { renderSetCards(currentSet, cards); updateSetDetailProgress(currentSet, cards); renderSetsGrid(); }
   showToast('Card removed', 'error');
 }
 
@@ -1178,8 +1098,8 @@ function closeSetDetail() {
 }
 
 // ── Binder ───────────────────────────────────────────────────────────────────
-let binderMode = 'dex'; // 'dex' | 'set'
-let binderSelectedSet = null; // { id, name, cards[] }
+let binderMode = 'dex';
+let binderSelectedSet = null;
 
 function setBinderMode(mode) {
   binderMode = mode;
@@ -1187,18 +1107,15 @@ function setBinderMode(mode) {
   const setBtn = document.getElementById('binder-mode-set');
   const setSearchWrap = document.getElementById('binder-set-search-wrap');
   const selectedLabel = document.getElementById('binder-selected-set-label');
-
   if (mode === 'dex') {
     dexBtn.style.background = 'var(--gold)'; dexBtn.style.color = 'var(--bg)';
     setBtn.style.background = 'transparent'; setBtn.style.color = 'var(--text2)';
-    setSearchWrap.style.display = 'none';
-    selectedLabel.style.display = 'none';
+    setSearchWrap.style.display = 'none'; selectedLabel.style.display = 'none';
     document.getElementById('binder-thead-row').innerHTML = '<th>#</th><th>POKÉMON</th><th>OWNED</th><th>PAGE</th><th>SLOT</th>';
   } else {
     setBtn.style.background = 'var(--gold)'; setBtn.style.color = 'var(--bg)';
     dexBtn.style.background = 'transparent'; dexBtn.style.color = 'var(--text2)';
     setSearchWrap.style.display = 'block';
-    // Load sets if not yet loaded
     if (allSets.length === 0) loadAllSets().then(() => renderBinderSetDropdown());
     document.getElementById('binder-thead-row').innerHTML = '<th>#</th><th>CARD</th><th>OWNED</th><th>PAGE</th><th>SLOT</th>';
   }
@@ -1209,10 +1126,8 @@ function renderBinderSetDropdown() {
   const q = document.getElementById('binder-set-search').value.toLowerCase();
   const dropdown = document.getElementById('binder-set-dropdown');
   if (!q) { dropdown.style.display = 'none'; return; }
-
   const matches = allSets.filter(s => s.name.toLowerCase().includes(q) || (s.series||'').toLowerCase().includes(q)).slice(0, 20);
   if (matches.length === 0) { dropdown.style.display = 'none'; return; }
-
   dropdown.style.display = 'block';
   dropdown.innerHTML = matches.map(s => `
     <div onclick="selectBinderSet('${s.id}')"
@@ -1225,23 +1140,18 @@ function renderBinderSetDropdown() {
 async function selectBinderSet(setId) {
   const set = allSets.find(s => s.id === setId);
   if (!set) return;
-
   document.getElementById('binder-set-search').value = set.name;
   document.getElementById('binder-set-dropdown').style.display = 'none';
   document.getElementById('binder-selected-set-label').textContent = set.name.toUpperCase();
   document.getElementById('binder-selected-set-label').style.display = 'block';
-
-  // Load cards if not cached
   if (!setCardsCache[setId]) {
-    document.getElementById('binder-tbody').innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)"><span class="spinner"></span> Loading set cards...</td></tr>';
+    document.getElementById('binder-tbody').innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)"><span class="spinner"></span> Loading...</td></tr>';
     try {
-      // Try DB first
-      if (db) {
-        const dbCards = await getSetCardsFromDB(setId);
-        if (dbCards && dbCards.length) setCardsCache[setId] = dbCards;
-      }
-      // Fetch from API if not in DB
-      if (!setCardsCache[setId] || setCardsCache[setId].length === 0) {
+      const cached = await dbGetAll('cards');
+      const fromDB = cached.filter(c => c.setId === setId);
+      if (fromDB.length) {
+        setCardsCache[setId] = fromDB;
+      } else {
         const headers = {}; if (apiKey) headers['X-Api-Key'] = apiKey;
         let cards = [], page = 1;
         while (true) {
@@ -1253,19 +1163,11 @@ async function selectBinderSet(setId) {
           page++;
         }
         setCardsCache[setId] = cards;
-        // Save to DB for next time
-        if (cards.length && db) {
-          const lean = cards.map(c => ({
-            id: c.id, name: c.name, number: c.number,
-            setId: set.id, setName: set.name,
-            image: c.images?.small || null,
-            nationalPokedexNumbers: c.nationalPokedexNumbers || []
-          }));
-          dbPutBulk('cards', lean).catch(() => {});
-        }
+        const lean = cards.map(c => ({ id: c.id, name: c.name, number: c.number, setId: set.id, setName: set.name, image: c.images?.small || null }));
+        dbPutBulk('cards', lean);
       }
     } catch {
-      document.getElementById('binder-tbody').innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--red)">Failed to load set cards</td></tr>';
+      document.getElementById('binder-tbody').innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--red)">Failed to load</td></tr>';
       return;
     }
   }
@@ -1279,56 +1181,45 @@ function renderBinder() {
   const perPage = cols * rows;
   document.getElementById('binder-info').textContent = cols + '×' + rows + ' = ' + perPage + ' cards/page';
   const tbody = document.getElementById('binder-tbody');
-
   if (binderMode === 'dex') {
     const ownedPokemon = pokemonList.filter(p => isOwned(p.id));
-    if (ownedPokemon.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text3)">No cards owned yet</td></tr>';
-      return;
-    }
+    if (ownedPokemon.length === 0) { tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text3)">No cards owned yet</td></tr>'; return; }
     tbody.innerHTML = ownedPokemon.map(p => {
-      const slotIndex = p.id - 1; // fixed by dex number
+      const slotIndex = p.id - 1;
       const page = Math.floor(slotIndex / perPage) + 1;
       const slot = (slotIndex % perPage) + 1;
       return `<tr>
         <td style="color:var(--text3)">#${String(p.id).padStart(4,'0')}</td>
         <td style="color:var(--text)">${p.name}</td>
-        <td style="color:var(--green)">✓ ${getOwned(p.id).length} card${getOwned(p.id).length !== 1 ? 's' : ''}</td>
+        <td style="color:var(--green)">✓ ${getOwned(p.id).length} card${getOwned(p.id).length!==1?'s':''}</td>
         <td style="color:var(--gold)">${page}</td>
         <td style="color:var(--text2)">${slot}</td>
       </tr>`;
     }).join('');
-
   } else {
-    // Set mode
-    if (!binderSelectedSet) {
-      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text3)">Search and select a set above</td></tr>';
-      return;
-    }
-    const cards = binderSelectedSet.cards;
-    // Sort numerically by card number (same as set detail view)
-    const sorted = [...cards].sort((a, b) => {
-      const numA = parseInt((a.number || '').replace(/\D/g, '')) || 0;
-      const numB = parseInt((b.number || '').replace(/\D/g, '')) || 0;
-      if (numA !== numB) return numA - numB;
-      return (a.number || '').localeCompare(b.number || '');
+    if (!binderSelectedSet) { tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text3)">Search and select a set above</td></tr>'; return; }
+    const sorted = [...binderSelectedSet.cards].sort((a, b) => {
+      const nA = parseInt((a.number||'').replace(/\D/g,'')) || 0;
+      const nB = parseInt((b.number||'').replace(/\D/g,'')) || 0;
+      if (nA !== nB) return nA - nB;
+      return (a.number||'').localeCompare(b.number||'');
     });
-
-    // Fixed slot = card's position in the sorted full set list (0-based)
     tbody.innerHTML = sorted.map((card, slotIndex) => {
       const owned = isCardOwnedInSet(card.id);
       const page = Math.floor(slotIndex / perPage) + 1;
       const slot = (slotIndex % perPage) + 1;
-      return `<tr style="${owned ? '' : 'opacity:0.45'}">
-        <td style="color:var(--text3)">#${card.number || '?'}</td>
-        <td style="color:${owned ? 'var(--text)' : 'var(--text3)'}">${card.name}</td>
-        <td style="color:${owned ? 'var(--green)' : 'var(--text3)'}">${owned ? '✓ OWNED' : '—'}</td>
+      return `<tr style="${owned?'':'opacity:0.45'}">
+        <td style="color:var(--text3)">#${card.number||'?'}</td>
+        <td style="color:${owned?'var(--text)':'var(--text3)'}">${card.name}</td>
+        <td style="color:${owned?'var(--green)':'var(--text3)'}">${owned?'✓ OWNED':'—'}</td>
         <td style="color:var(--gold)">${page}</td>
         <td style="color:var(--text2)">${slot}</td>
       </tr>`;
     }).join('');
   }
 }
+
+
 
 // ── Settings ─────────────────────────────────────────────────────────────────
 function saveApiKey() {
@@ -1347,13 +1238,12 @@ function renderStats() {
   `;
 }
 function clearCardCache() {
-  if (!confirm('Clear cached card data? The app will re-fetch from the API next time you browse. Your collection is not affected.')) return;
-  setCardsCache = {};
-  if (db) dbClear('cards').catch(() => {});
-  showToast('Card cache cleared', 'success');
+  if (!confirm('Clear cached card data? Your collection is not affected.')) return;
+  dbClearStore('cards');
+  dbClearStore('pokemon');
+  dbClearStore('sets');
+  showToast('Cache cleared', 'success');
 }
-
-
 function resetCollection() {
   if (!confirm('Reset entire collection? This cannot be undone.')) return;
   collection = {};
@@ -1391,54 +1281,64 @@ function showToast(msg, type='success') {
   toastTimer = setTimeout(() => { el.className = ''; }, 3000);
 }
 
-// ── Lazy cache helpers ────────────────────────────────────────────────────────
-async function loadFromDB() {
-  // Only preload sets — pokemon list is handled by loadPokemonList
+// ── IndexedDB lazy cache ──────────────────────────────────────────────────────
+const DB_NAME = 'sgc_tcg_db';
+const DB_VERSION = 1;
+let db = null;
+
+async function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = e => {
+      const d = e.target.result;
+      if (!d.objectStoreNames.contains('pokemon')) d.createObjectStore('pokemon', { keyPath: 'id' });
+      if (!d.objectStoreNames.contains('cards')) d.createObjectStore('cards', { keyPath: 'id' });
+      if (!d.objectStoreNames.contains('sets')) d.createObjectStore('sets', { keyPath: 'id' });
+    };
+    req.onsuccess = e => { db = e.target.result; resolve(); };
+    req.onerror = () => resolve(); // silently fail — app works without DB
+  });
+}
+
+function dbGetAll(store) {
+  return new Promise((resolve) => {
+    if (!db) return resolve([]);
+    try {
+      const req = db.transaction(store, 'readonly').objectStore(store).getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => resolve([]);
+    } catch { resolve([]); }
+  });
+}
+
+function dbPutBulk(store, items) {
+  if (!db || !items.length) return;
   try {
-    const sets = await dbGetAll('sets');
-    if (sets.length) allSets = sets;
+    const tx = db.transaction(store, 'readwrite');
+    const os = tx.objectStore(store);
+    items.forEach(item => os.put(item));
   } catch {}
 }
 
-async function getSetCardsFromDB(setId) {
-  if (setCardsCache[setId]) return setCardsCache[setId];
-  try {
-    const all = await dbGetAll('cards');
-    const cards = all.filter(c => c.setId === setId);
-    if (cards.length) { setCardsCache[setId] = cards; return cards; }
-  } catch {}
-  return null;
-}
-
-async function getPokemonPrintingsFromDB(pokemonName) {
-  try {
-    const name = pokemonName.split(' ')[0].toLowerCase();
-    const all = await dbGetAll('cards');
-    const results = all.filter(c => c.name?.toLowerCase().startsWith(name));
-    if (results.length) {
-      const setOrder = {};
-      allSets.forEach((s, i) => setOrder[s.id] = allSets.length - i);
-      results.sort((a, b) => (setOrder[a.setId] || 0) - (setOrder[b.setId] || 0));
-      return results;
-    }
-  } catch {}
-  return null;
+function dbClearStore(store) {
+  if (!db) return;
+  try { db.transaction(store, 'readwrite').objectStore(store).clear(); } catch {}
 }
 
 // ── Load Pokémon list ─────────────────────────────────────────────────────────
 async function loadPokemonList() {
   document.getElementById('grid').innerHTML = '<div class="empty-state"><span class="spinner"></span>LOADING POKÉDEX...</div>';
-  // Try DB first
-  try {
-    const items = await dbGetAll('pokemon');
-    if (items.length && items[0].sprite) { // only use DB if sprites are stored
-      pokemonList = items;
-      renderGrid();
-      updateProgress();
-      return;
-    }
-  } catch {}
-  // Fetch from API
+
+  // Try DB first (only if sprites are stored)
+  const cached = await dbGetAll('pokemon');
+  if (cached.length === TOTAL && cached[0]?.sprite) {
+    pokemonList = cached.sort((a, b) => a.id - b.id);
+    renderGrid();
+    updateProgress();
+    return;
+  }
+
+  // Fetch from PokeAPI
   try {
     const res = await fetch(`${POKEAPI_BASE}/pokemon?limit=${TOTAL}&offset=0`);
     const data = await res.json();
@@ -1447,7 +1347,7 @@ async function loadPokemonList() {
       name: p.name.charAt(0).toUpperCase() + p.name.slice(1).replace(/-/g, ' '),
       sprite: `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${i + 1}.png`
     }));
-    dbPutBulk('pokemon', pokemonList).catch(() => {});
+    dbPutBulk('pokemon', pokemonList); // save for next time
   } catch {
     pokemonList = Array.from({ length: TOTAL }, (_, i) => ({ id: i + 1, name: `Pokémon #${i + 1}`, sprite: null }));
   }
@@ -1460,86 +1360,10 @@ async function init() {
   loadData();
   loadSetsMeta();
   await openDB();
-  await loadFromDB();
   await loadPokemonList();
 }
 
 init();
-
-
-
-const DB_NAME = 'sgc_tcg_db';
-const DB_VERSION = 1;
-let db = null;
-
-function openDB() {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = e => {
-      const d = e.target.result;
-      if (!d.objectStoreNames.contains('sets')) d.createObjectStore('sets', { keyPath: 'id' });
-      if (!d.objectStoreNames.contains('cards')) d.createObjectStore('cards', { keyPath: 'id' });
-      if (!d.objectStoreNames.contains('pokemon')) d.createObjectStore('pokemon', { keyPath: 'id' });
-      if (!d.objectStoreNames.contains('meta')) d.createObjectStore('meta', { keyPath: 'key' });
-    };
-    req.onsuccess = e => { db = e.target.result; resolve(db); };
-    req.onerror = () => reject(req.error);
-  });
-}
-
-function dbGet(store, key) {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(store, 'readonly');
-    const req = tx.objectStore(store).get(key);
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-
-function dbGetAll(store) {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(store, 'readonly');
-    const req = tx.objectStore(store).getAll();
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-
-function dbPutBulk(store, items) {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(store, 'readwrite');
-    const os = tx.objectStore(store);
-    items.forEach(item => os.put(item));
-    tx.oncomplete = resolve;
-    tx.onerror = () => reject(tx.error);
-  });
-}
-
-function dbPut(store, item) {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(store, 'readwrite');
-    const req = tx.objectStore(store).put(item);
-    req.onsuccess = resolve;
-    req.onerror = () => reject(req.error);
-  });
-}
-
-function dbClear(store) {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(store, 'readwrite');
-    const req = tx.objectStore(store).clear();
-    req.onsuccess = resolve;
-    req.onerror = () => reject(req.error);
-  });
-}
-
-async function getDBMeta(key) {
-  try { const r = await dbGet('meta', key); return r?.value; } catch { return null; }
-}
-async function setDBMeta(key, value) {
-  try { await dbPut('meta', { key, value }); } catch {}
-}
-
 
 </script>
 </body>
