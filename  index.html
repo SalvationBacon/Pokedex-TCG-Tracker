@@ -1041,7 +1041,14 @@ function renderSetCards(set, cards) {
     container.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:32px;color:var(--text3);font-size:11px">No cards found for this set.</div>';
     return;
   }
-  container.innerHTML = cards.map(card => {
+  // Sort numerically — handles "001", "10", "GG01", "TG15" etc.
+  const sorted = [...cards].sort((a, b) => {
+    const numA = parseInt((a.number || '').replace(/\D/g, '')) || 0;
+    const numB = parseInt((b.number || '').replace(/\D/g, '')) || 0;
+    if (numA !== numB) return numA - numB;
+    return (a.number || '').localeCompare(b.number || '');
+  });
+  container.innerHTML = sorted.map(card => {
     const owned = isCardOwnedInSet(card.id);
     const img = card.images?.small;
     return `<div class="set-card-item ${owned ? 'owned' : ''}" id="sci-${card.id}"
