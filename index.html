@@ -193,13 +193,70 @@
   /* Empty state */
   .empty-state { grid-column: 1/-1; text-align: center; padding: 60px 20px; color: var(--text3); font-size: 11px; letter-spacing: 0.15em; }
 
-  /* Canvas (hidden) */
-  #capture-canvas { display: none; }
+  /* Sets view */
+  #sets-view { display: none; }
+  #sets-view.active { display: block; }
+  #sets-search-wrap { padding: 10px 14px; border-bottom: 1px solid var(--border); position: sticky; top: 57px; z-index: 40; background: rgba(8,8,16,0.92); backdrop-filter: blur(10px); display: flex; gap: 8px; align-items: center; }
+  #sets-search { flex: 1; background: var(--bg3); border: 1px solid var(--border2); border-radius: 3px; padding: 8px 12px; color: var(--text); font-family: var(--mono); font-size: 12px; outline: none; letter-spacing: 0.08em; }
+  #sets-search:focus { border-color: var(--gold); }
+  #sets-show-hidden-btn { padding: 5px 10px; font-size: 9px; letter-spacing: 0.12em; font-family: var(--mono); background: transparent; color: var(--text3); border: 1px solid var(--border); border-radius: 2px; cursor: pointer; white-space: nowrap; transition: all 0.15s; }
+  #sets-show-hidden-btn.active { color: var(--gold); border-color: var(--gold); }
+  #sets-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; padding: 14px; }
+  .set-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 7px; overflow: hidden; cursor: pointer; transition: all 0.15s; position: relative; }
+  .set-card:hover { transform: translateY(-2px); border-color: var(--border2); box-shadow: 0 4px 16px rgba(0,0,0,0.4); }
+  .set-card.complete { border-color: #2a4a3a; box-shadow: 0 0 10px rgba(92,190,140,0.08); }
+  .set-card.pinned { border-color: var(--gold) !important; }
+  .set-card-logo-wrap { height: 70px; background: var(--bg3); display: flex; align-items: center; justify-content: center; padding: 10px; position: relative; }
+  .set-card-logo { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .set-card-logo-placeholder { font-size: 28px; opacity: 0.2; }
+  .set-pin-btn { position: absolute; top: 5px; left: 5px; background: rgba(8,8,16,0.8); border: 1px solid var(--border2); border-radius: 2px; color: var(--text3); font-size: 10px; cursor: pointer; padding: 2px 5px; line-height: 1; transition: all 0.15s; }
+  .set-pin-btn:hover, .set-pin-btn.pinned { color: var(--gold); border-color: var(--gold); }
+  .set-hide-btn { position: absolute; top: 5px; right: 5px; background: rgba(8,8,16,0.8); border: 1px solid var(--border2); border-radius: 2px; color: var(--text3); font-size: 10px; cursor: pointer; padding: 2px 5px; line-height: 1; transition: all 0.15s; }
+  .set-hide-btn:hover { color: var(--red); border-color: var(--red); }
+  .set-card-body { padding: 8px 10px 10px; }
+  .set-card-name { font-size: 10px; color: var(--text); letter-spacing: 0.06em; line-height: 1.3; margin-bottom: 4px; }
+  .set-card-meta { font-size: 8px; color: var(--text3); letter-spacing: 0.08em; margin-bottom: 6px; }
+  .set-progress-bar { height: 3px; background: var(--bg); border-radius: 2px; overflow: hidden; margin-bottom: 4px; }
+  .set-progress-fill { height: 100%; background: linear-gradient(90deg, var(--green), #8be8b8); border-radius: 2px; transition: width 0.4s ease; }
+  .set-progress-text { font-size: 8px; color: var(--text2); letter-spacing: 0.08em; display: flex; justify-content: space-between; align-items: center; }
+  .set-complete-badge { font-size: 7px; color: var(--green); letter-spacing: 0.12em; }
+  .set-pinned-badge { position: absolute; bottom: 5px; right: 8px; font-size: 7px; color: var(--gold); letter-spacing: 0.1em; }
+
+  /* Set detail view */
+  #set-detail { display: none; position: fixed; inset: 0; background: var(--bg); z-index: 80; flex-direction: column; overflow: hidden; }
+  #set-detail.open { display: flex; }
+  #set-detail-header { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; background: rgba(8,8,16,0.96); flex-shrink: 0; }
+  #set-detail-back { background: none; border: none; color: var(--text2); font-size: 18px; cursor: pointer; padding: 2px 8px 2px 0; }
+  #set-detail-back:hover { color: var(--text); }
+  #set-detail-logo { height: 36px; object-fit: contain; }
+  #set-detail-info { flex: 1; }
+  #set-detail-name { font-family: var(--sans); font-size: 14px; font-weight: 700; color: var(--gold); letter-spacing: 0.15em; }
+  #set-detail-meta { font-size: 9px; color: var(--text2); letter-spacing: 0.1em; margin-top: 1px; }
+  #set-detail-progress-wrap { flex-shrink: 0; text-align: right; }
+  #set-detail-progress-text { font-size: 11px; color: var(--text); letter-spacing: 0.1em; }
+  #set-detail-pct { font-size: 9px; color: var(--text2); }
+  #set-detail-bar-wrap { height: 3px; background: var(--bg3); border-radius: 2px; margin-top: 4px; width: 80px; }
+  #set-detail-bar { height: 100%; background: linear-gradient(90deg, var(--green), #8be8b8); border-radius: 2px; transition: width 0.4s; }
+  #set-detail-cards { flex: 1; overflow-y: auto; padding: 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; align-content: start; }
+  .set-card-item { background: var(--bg2); border: 1px solid var(--border); border-radius: 6px; padding: 7px; cursor: pointer; display: flex; flex-direction: column; align-items: center; transition: all 0.15s; position: relative; }
+  .set-card-item.owned { background: #0c1810; border-color: #253525; }
+  .set-card-item:hover { transform: translateY(-2px); }
+  .set-card-item.owned:hover { border-color: #3a5a3a; }
+  .set-card-item img { width: 100%; aspect-ratio: 2.5/3.5; object-fit: contain; border-radius: 3px; }
+  .set-card-item img.locked-img { filter: grayscale(1) brightness(0.6); }
+  .set-card-item-num { font-size: 8px; color: var(--text3); letter-spacing: 0.1em; margin-bottom: 3px; }
+  .set-card-item-name { font-size: 8px; color: var(--text2); text-align: center; margin-top: 4px; line-height: 1.3; }
+  .set-card-item.owned .set-card-item-name { color: #a8c8a8; }
+  .set-owned-dot { position: absolute; top: 4px; right: 4px; width: 5px; height: 5px; border-radius: 50%; background: var(--green); }
+  .set-lock { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -65%); font-size: 16px; opacity: 0.4; pointer-events: none; }
+  .set-remove-btn { font-size: 7px; background: none; border: none; color: var(--red); cursor: pointer; margin-top: 3px; letter-spacing: 0.1em; font-family: var(--mono); }
 
   @media (max-width: 400px) {
     #grid { grid-template-columns: repeat(auto-fill, minmax(75px, 1fr)); gap: 5px; padding: 8px; }
     .poke-sprite { width: 42px; height: 42px; }
     .sprite-placeholder { width: 42px; height: 42px; }
+    #sets-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; padding: 10px; }
+    #set-detail-cards { grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); }
   }
 </style>
 </head>
@@ -214,6 +271,7 @@
   </div>
   <div id="nav">
     <button class="nav-btn active" onclick="switchView('dex')">DEX</button>
+    <button class="nav-btn" onclick="switchView('sets')">SETS</button>
     <button class="nav-btn" onclick="switchView('binder')">BINDER</button>
     <button class="nav-btn" onclick="switchView('settings')">⚙</button>
   </div>
@@ -228,7 +286,34 @@
   <div id="grid"></div>
 </div>
 
-<!-- Binder View -->
+<!-- Sets View -->
+<div id="sets-view" class="view-section">
+  <div id="sets-search-wrap">
+    <input id="sets-search" type="text" placeholder="Search sets..." oninput="renderSetsGrid()"/>
+    <button id="sets-show-hidden-btn" onclick="toggleShowHidden()">SHOW HIDDEN</button>
+  </div>
+  <div id="sets-grid"></div>
+</div>
+
+<!-- Set Detail Panel -->
+<div id="set-detail">
+  <div id="set-detail-header">
+    <button id="set-detail-back" onclick="closeSetDetail()">←</button>
+    <img id="set-detail-logo" src="" alt="" onerror="this.style.display='none'"/>
+    <div id="set-detail-info">
+      <div id="set-detail-name"></div>
+      <div id="set-detail-meta"></div>
+    </div>
+    <div id="set-detail-progress-wrap">
+      <div id="set-detail-progress-text"></div>
+      <div id="set-detail-pct"></div>
+      <div id="set-detail-bar-wrap"><div id="set-detail-bar" style="width:0%"></div></div>
+    </div>
+  </div>
+  <div id="set-detail-cards"></div>
+</div>
+
+
 <div id="binder-view" class="view-section">
   <div class="section-title">BINDER CALCULATOR</div>
   <div class="binder-controls">
@@ -413,13 +498,18 @@ function switchView(v) {
   currentView = v;
   document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
-  document.getElementById(v + '-view').classList.add('active');
+  const viewEl = document.getElementById(v + '-view');
+  if (viewEl) viewEl.classList.add('active');
   document.querySelectorAll('.nav-btn').forEach(btn => {
     if (btn.getAttribute('onclick').includes("'" + v + "'")) btn.classList.add('active');
   });
   if (v === 'binder') renderBinder();
   if (v === 'settings') renderStats();
   if (v === 'dex') renderGrid();
+  if (v === 'sets') {
+    if (allSets.length === 0) loadAllSets();
+    else renderSetsGrid();
+  }
 }
 
 // ── Grid ─────────────────────────────────────────────────────────────────────
@@ -545,9 +635,15 @@ function showConfirm(pokeId, cardId, name, image, set, number, onConfirm) {
 function confirmAdd() {
   if (!pendingCard) return;
   const { pokeId, cardId, name, image, set, number, onConfirm } = pendingCard;
-  addCard(pokeId, { id: cardId, name, image, set, number });
+  if (pokeId) addCard(pokeId, { id: cardId, name, image, set, number });
   showToast(name + ' added!', 'success');
   renderGrid();
+  // Refresh set detail if open
+  if (currentSet && setCardsCache[currentSet.id]) {
+    renderSetCards(currentSet, setCardsCache[currentSet.id]);
+    updateSetDetailProgress(currentSet, setCardsCache[currentSet.id]);
+    renderSetsGrid();
+  }
   if (onConfirm) onConfirm(pokeId, cardId, name, image, set, number);
   closeConfirm();
 }
@@ -779,6 +875,234 @@ function showAddResults() {
   document.getElementById('add-printings-wrap').style.display = 'none';
 }
 
+// ── Sets ──────────────────────────────────────────────────────────────────────
+const SETS_STORAGE = 'sgc_sets_meta';      // { pinned: [], hidden: [] }
+const SET_CARDS_STORAGE = 'sgc_set_cards'; // { setId: [cardIds owned] }
+
+let allSets = [];
+let setsMeta = { pinned: [], hidden: [] };
+let setCardsCache = {}; // setId -> full card list from API
+let showHidden = false;
+let currentSet = null;
+
+function loadSetsMeta() {
+  try { setsMeta = JSON.parse(localStorage.getItem(SETS_STORAGE) || '{"pinned":[],"hidden":[]}'); } catch { setsMeta = { pinned: [], hidden: [] }; }
+}
+function saveSetsMeta() { localStorage.setItem(SETS_STORAGE, JSON.stringify(setsMeta)); }
+
+// Check if a card is owned in a set (by card id stored in main collection)
+function isCardOwnedInSet(cardId) {
+  return Object.values(collection).some(p => p.owned?.some(c => c.id === cardId));
+}
+
+function getSetOwnedCount(setId, cards) {
+  if (!cards) return 0;
+  return cards.filter(c => isCardOwnedInSet(c.id)).length;
+}
+
+async function loadAllSets() {
+  const setsGrid = document.getElementById('sets-grid');
+  setsGrid.innerHTML = '<div class="empty-state"><span class="spinner"></span>LOADING SETS...</div>';
+  try {
+    const headers = {}; if (apiKey) headers['X-Api-Key'] = apiKey;
+    const res = await fetch(`${TCG_BASE}/sets?orderBy=-releaseDate&pageSize=500`, { headers });
+    const data = await res.json();
+    allSets = data.data || [];
+    renderSetsGrid();
+  } catch {
+    setsGrid.innerHTML = '<div class="empty-state" style="color:var(--red)">Failed to load sets. Check connection.</div>';
+  }
+}
+
+function renderSetsGrid() {
+  const q = document.getElementById('sets-search').value.toLowerCase();
+  const setsGrid = document.getElementById('sets-grid');
+
+  let sets = allSets.filter(s => {
+    if (!showHidden && setsMeta.hidden.includes(s.id)) return false;
+    if (q && !s.name.toLowerCase().includes(q) && !s.series?.toLowerCase().includes(q)) return false;
+    return true;
+  });
+
+  // Pinned float to top
+  const pinned = sets.filter(s => setsMeta.pinned.includes(s.id));
+  const rest = sets.filter(s => !setsMeta.pinned.includes(s.id));
+  sets = [...pinned, ...rest];
+
+  if (sets.length === 0) {
+    setsGrid.innerHTML = '<div class="empty-state">NO SETS FOUND</div>';
+    return;
+  }
+
+  setsGrid.innerHTML = sets.map(s => {
+    const isPinned = setsMeta.pinned.includes(s.id);
+    const isHidden = setsMeta.hidden.includes(s.id);
+    const cachedCards = setCardsCache[s.id];
+    const owned = cachedCards ? getSetOwnedCount(s.id, cachedCards) : 0;
+    const total = s.total || s.printedTotal || '?';
+    const pct = cachedCards && total !== '?' ? (owned / total * 100) : 0;
+    const complete = cachedCards && owned >= total && total !== '?';
+
+    return `<div class="set-card ${complete ? 'complete' : ''} ${isPinned ? 'pinned' : ''}" onclick="openSetDetail('${s.id}')">
+      <div class="set-card-logo-wrap">
+        ${s.images?.logo ? `<img class="set-card-logo" src="${s.images.logo}" alt="${s.name}" loading="lazy" onerror="this.style.display='none'">` : `<div class="set-card-logo-placeholder">🃏</div>`}
+        <button class="set-pin-btn ${isPinned ? 'pinned' : ''}" onclick="event.stopPropagation();togglePin('${s.id}')" title="${isPinned ? 'Unpin' : 'Pin'}">📌</button>
+        <button class="set-hide-btn" onclick="event.stopPropagation();toggleHide('${s.id}')" title="${isHidden ? 'Unhide' : 'Hide'}">✕</button>
+      </div>
+      <div class="set-card-body">
+        <div class="set-card-name">${s.name}</div>
+        <div class="set-card-meta">${s.series || ''} · ${s.releaseDate || ''}</div>
+        <div class="set-progress-bar"><div class="set-progress-fill" style="width:${pct}%"></div></div>
+        <div class="set-progress-text">
+          <span>${cachedCards ? owned + ' / ' + total : '— / ' + total}</span>
+          ${complete ? '<span class="set-complete-badge">✓ COMPLETE</span>' : ''}
+        </div>
+      </div>
+      ${isPinned ? '<div class="set-pinned-badge">PINNED</div>' : ''}
+    </div>`;
+  }).join('');
+}
+
+function togglePin(setId) {
+  const idx = setsMeta.pinned.indexOf(setId);
+  if (idx > -1) setsMeta.pinned.splice(idx, 1);
+  else setsMeta.pinned.push(setId);
+  saveSetsMeta();
+  renderSetsGrid();
+}
+
+function toggleHide(setId) {
+  const idx = setsMeta.hidden.indexOf(setId);
+  if (idx > -1) setsMeta.hidden.splice(idx, 1);
+  else {
+    setsMeta.hidden.push(setId);
+    // Also unpin if hiding
+    const pinIdx = setsMeta.pinned.indexOf(setId);
+    if (pinIdx > -1) setsMeta.pinned.splice(pinIdx, 1);
+  }
+  saveSetsMeta();
+  renderSetsGrid();
+}
+
+function toggleShowHidden() {
+  showHidden = !showHidden;
+  const btn = document.getElementById('sets-show-hidden-btn');
+  btn.textContent = showHidden ? 'HIDE HIDDEN' : 'SHOW HIDDEN';
+  btn.classList.toggle('active', showHidden);
+  renderSetsGrid();
+}
+
+async function openSetDetail(setId) {
+  const set = allSets.find(s => s.id === setId);
+  if (!set) return;
+  currentSet = set;
+
+  document.getElementById('set-detail-name').textContent = set.name.toUpperCase();
+  document.getElementById('set-detail-meta').textContent = (set.series || '') + (set.releaseDate ? '  ·  ' + set.releaseDate : '');
+  const logoEl = document.getElementById('set-detail-logo');
+  if (set.images?.logo) { logoEl.src = set.images.logo; logoEl.style.display = 'block'; }
+  else logoEl.style.display = 'none';
+
+  document.getElementById('set-detail').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  document.getElementById('set-detail-cards').innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:48px;color:var(--text3);font-size:11px;letter-spacing:.15em"><span class="spinner"></span>LOADING CARDS...</div>';
+  updateSetDetailProgress(set, []);
+
+  try {
+    let cards = setCardsCache[setId];
+    if (!cards) {
+      const headers = {}; if (apiKey) headers['X-Api-Key'] = apiKey;
+      const res = await fetch(`${TCG_BASE}/cards?q=set.id:${setId}&pageSize=500&orderBy=number`, { headers });
+      const data = await res.json();
+      cards = data.data || [];
+      setCardsCache[setId] = cards;
+    }
+    updateSetDetailProgress(set, cards);
+    renderSetCards(set, cards);
+    // Also refresh the sets grid card count
+    renderSetsGrid();
+  } catch {
+    document.getElementById('set-detail-cards').innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:48px;color:var(--red);font-size:11px">Failed to load cards. Check connection.</div>';
+  }
+}
+
+function updateSetDetailProgress(set, cards) {
+  const total = set.total || set.printedTotal || cards.length || 0;
+  const owned = getSetOwnedCount(set.id, cards);
+  const pct = total > 0 ? (owned / total * 100).toFixed(0) : 0;
+  document.getElementById('set-detail-progress-text').textContent = owned + ' / ' + total;
+  document.getElementById('set-detail-pct').textContent = pct + '%';
+  document.getElementById('set-detail-bar').style.width = pct + '%';
+}
+
+function renderSetCards(set, cards) {
+  const container = document.getElementById('set-detail-cards');
+  if (cards.length === 0) {
+    container.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:32px;color:var(--text3);font-size:11px">No cards found for this set.</div>';
+    return;
+  }
+  container.innerHTML = cards.map(card => {
+    const owned = isCardOwnedInSet(card.id);
+    const img = card.images?.small;
+    return `<div class="set-card-item ${owned ? 'owned' : ''}" id="sci-${card.id}"
+      onclick="${owned ? `removeSetCard('${set.id}','${card.id}')` : `confirmSetCard('${set.id}','${card.id}','${(card.name||'').replace(/'/g,"\\'")}','${img||''}','${(set.name||'').replace(/'/g,"\\'")}','${card.number||''}')`}"
+      title="${owned ? 'Click to remove' : 'Click to add'}">
+      ${owned ? '<div class="set-owned-dot"></div>' : '<div class="set-lock">🔒</div>'}
+      <div class="set-card-item-num">#${card.number || '?'}</div>
+      ${img ? `<img src="${img}" alt="${card.name}" class="${owned ? '' : 'locked-img'}" loading="lazy">` : `<div style="width:100%;aspect-ratio:2.5/3.5;background:var(--bg3);border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:24px;opacity:.15">🃏</div>`}
+      <div class="set-card-item-name">${card.name}</div>
+      ${owned ? `<button class="set-remove-btn" onclick="event.stopPropagation();removeSetCard('${set.id}','${card.id}')">REMOVE</button>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function confirmSetCard(setId, cardId, name, image, setName, number) {
+  // Find the pokemon id for this card
+  const pokeId = findPokeIdFromCardName(name) || 0;
+  showConfirm(pokeId, cardId, name, image, setName, number, (pid) => {
+    // If we found a matching pokemon, it was already added to collection via confirmAdd
+    // If not (trainer cards etc), add a placeholder to collection under id 0
+    if (!pid || pid === 0) {
+      // Store trainer/energy cards under a special key
+      if (!collection['_misc']) collection['_misc'] = { owned: [], display: null };
+      if (!collection['_misc'].owned.find(c => c.id === cardId)) {
+        collection['_misc'].owned.push({ id: cardId, name, image, set: setName, number });
+        saveData();
+      }
+    }
+    // Refresh set detail UI
+    const cards = setCardsCache[setId];
+    if (cards) {
+      renderSetCards(currentSet, cards);
+      updateSetDetailProgress(currentSet, cards);
+      renderSetsGrid();
+    }
+  });
+}
+
+function removeSetCard(setId, cardId) {
+  // Remove from all pokemon in collection
+  Object.keys(collection).forEach(pid => {
+    if (collection[pid]?.owned?.some(c => c.id === cardId)) {
+      removeCard(pid, cardId);
+    }
+  });
+  renderGrid();
+  const cards = setCardsCache[setId];
+  if (cards && currentSet) {
+    renderSetCards(currentSet, cards);
+    updateSetDetailProgress(currentSet, cards);
+    renderSetsGrid();
+  }
+  showToast('Card removed', 'error');
+}
+
+function closeSetDetail() {
+  document.getElementById('set-detail').classList.remove('open');
+  document.body.style.overflow = '';
+  currentSet = null;
+}
+
 // ── Binder ───────────────────────────────────────────────────────────────────
 function renderBinder() {
   const cols = parseInt(document.getElementById('binder-cols').value);
@@ -878,6 +1202,7 @@ async function loadPokemonList() {
 
 // ── Init ─────────────────────────────────────────────────────────────────────
 loadData();
+loadSetsMeta();
 loadPokemonList();
 </script>
 </body>
