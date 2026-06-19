@@ -417,10 +417,13 @@
     <div id="binder-selected-set-label" style="display:none;font-size:10px;color:var(--gold);letter-spacing:.1em"></div>
   </div>
   <div id="binder-table-wrap">
-    <div id="binder-dex-search-wrap" style="padding-bottom:12px">
+    <div id="binder-dex-search-wrap" style="padding-bottom:12px;position:relative">
       <input id="binder-dex-search" type="text" placeholder="Search Pokémon name..."
-        oninput="binderCurrentPage=1;renderBinder()"
+        oninput="renderBinderSearchDropdown()"
+        onfocus="renderBinderSearchDropdown()"
+        onblur="setTimeout(()=>document.getElementById('binder-search-dropdown').style.display='none',200)"
         style="width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:3px;padding:8px 12px;color:var(--text);font-family:var(--mono);font-size:11px;outline:none;letter-spacing:0.08em"/>
+      <div id="binder-search-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg2);border:1px solid var(--border2);border-radius:0 0 4px 4px;z-index:50;max-height:200px;overflow-y:auto"></div>
     </div>
     <!-- Binder visualiser -->
     <div id="binder-viz-wrap">
@@ -1417,6 +1420,43 @@ let binderMode = 'dex';
 let binderSelectedSet = null;
 let binderCurrentPage = 1;
 let binderAllSlots = []; // full computed slot list for current mode
+let binderHighlightId = null; // pokemon id to highlight
+
+function renderBinderSearchDropdown() {
+  const q = document.getElementById('binder-dex-search').value.toLowerCase().trim();
+  const dropdown = document.getElementById('binder-search-dropdown');
+  if (!q) { dropdown.style.display = 'none'; binderHighlightId = null; renderBinderPage(); return; }
+
+  // Ensure slots are built
+  if (binderAllSlots.length === 0 && pokemonList.length > 0) {
+    const cols = parseInt(document.getElementById('binder-cols').value);
+    const rows = parseInt(document.getElementById('binder-rows').value);
+    binderAllSlots = buildDexSlots(cols * rows);
+  }
+
+  const matches = pokemonList.filter(p => p.name.toLowerCase().includes(q)).slice(0, 15);
+  if (matches.length === 0) { dropdown.style.display = 'none'; return; }
+  dropdown.style.display = 'block';
+  dropdown.innerHTML = matches.map(p => `
+    <div onclick="selectBinderPokemon(${p.id},'${p.name.replace(/'/g,"\\'")}')"
+      style="padding:8px 12px;cursor:pointer;font-size:11px;letter-spacing:0.08em;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;transition:background .1s"
+      onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background=''">
+      ${p.sprite ? `<img src="${p.sprite}" style="width:28px;height:28px;object-fit:contain">` : ''}
+      <span style="color:var(--text)">${p.name}</span>
+      <span style="color:var(--text3);font-size:9px;margin-left:auto">#${String(p.id).padStart(4,'0')}</span>
+    </div>
+  `).join('');
+}
+
+function selectBinderPokemon(id, name) {
+  document.getElementById('binder-dex-search').value = name;
+  document.getElementById('binder-search-dropdown').style.display = 'none';
+  binderHighlightId = id;
+  // Find the page this pokemon is on
+  const slot = binderAllSlots.find(s => s.pokemon?.id === id);
+  if (slot) { binderCurrentPage = slot.page; }
+  renderBinderPage();
+}
 
 function setBinderMode(mode) {
   binderMode = mode;
@@ -1554,6 +1594,8 @@ function binderJumpToPage(val) {
 function binderChangePage(dir) {
   const totalPages = binderAllSlots.length > 0 ? Math.max(...binderAllSlots.map(s => s.page)) : 1;
   binderCurrentPage = Math.max(1, Math.min(totalPages, binderCurrentPage + dir));
+  binderHighlightId = null;
+  document.getElementById('binder-dex-search').value = '';
   renderBinderPage();
 }
 
@@ -1580,34 +1622,16 @@ function renderBinderPage() {
   gridEl.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
 
   if (binderMode === 'dex') {
-    const q = (document.getElementById('binder-dex-search')?.value || '').toLowerCase();
-
-    // If searching, jump to the first page containing a match
-    if (q) {
-      const matchSlot = binderAllSlots.find(s => s.pokemon && s.pokemon.name.toLowerCase().includes(q));
-      if (matchSlot && matchSlot.page !== binderCurrentPage) {
-        binderCurrentPage = matchSlot.page;
-        document.getElementById('binder-page-label').textContent = `PAGE ${binderCurrentPage} OF ${totalPages}`;
-        document.getElementById('binder-prev').style.opacity = binderCurrentPage <= 1 ? '0.3' : '1';
-        document.getElementById('binder-next').style.opacity = binderCurrentPage >= totalPages ? '0.3' : '1';
-        // Rebuild page slots for new page
-        const newPageSlots = binderAllSlots.filter(s => s.page === binderCurrentPage);
-        grid.fill(null);
-        newPageSlots.forEach(s => { grid[s.slot - 1] = s; });
-      }
-    }
-
     gridEl.innerHTML = grid.map((slot) => {
       if (!slot || !slot.pokemon) {
         return `<div class="binder-slot empty"><div class="binder-slot-num">—</div></div>`;
       }
       const p = slot.pokemon;
-      const matchesSearch = !q || p.name.toLowerCase().includes(q);
+      const isHighlighted = binderHighlightId === p.id;
       const owned = slot.owned;
       const dispCard = owned ? (getOwned(p.id).find(c => c.id === getDisplay(p.id)) || getOwned(p.id)[0]) : null;
       const imgSrc = dispCard?.image || p.sprite;
-      const dimmed = q && !matchesSearch;
-      return `<div class="binder-slot ${owned?'filled':'empty'}" style="${matchesSearch && q ? 'border-color:var(--gold);opacity:1' : dimmed ? 'opacity:0.15' : ''}">
+      return `<div class="binder-slot ${owned?'filled':'empty'}" style="${isHighlighted ? 'border-color:var(--gold);box-shadow:0 0 12px rgba(200,169,110,0.4);opacity:1' : binderHighlightId ? 'opacity:0.25' : ''}">
         ${owned ? '<div class="binder-slot-owned-dot"></div>' : ''}
         ${imgSrc ? `<img src="${imgSrc}" alt="${p.name}" loading="lazy" style="${owned?'':'filter:grayscale(1) brightness(0.3)'}" onerror="this.style.display='none'">` : ''}
         <div class="binder-slot-name">${p.name}</div>
