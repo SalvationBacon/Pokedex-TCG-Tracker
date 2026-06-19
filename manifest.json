@@ -1,0 +1,18 @@
+{
+  "name": "POKÉDEX TCG",
+  "short_name": "PokédexTCG",
+  "description": "Pokémon TCG collection tracker",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#080810",
+  "theme_color": "#080810",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

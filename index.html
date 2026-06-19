@@ -6,6 +6,13 @@
 <title>POKÉDEX TCG — Collection Tracker</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet"/>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="icon" type="image/png" href="icon.png">
+<meta name="theme-color" content="#080810">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="PokédexTCG">
 
 <style>
   :root {
@@ -401,6 +408,11 @@
       </div>
     </div>
     <div id="modal-body">
+      <div id="modal-search-wrap" style="display:none;padding-bottom:12px">
+        <input id="modal-card-search" type="text" placeholder="Filter by card number or set name..."
+          oninput="filterPrintings()"
+          style="width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:3px;padding:8px 12px;color:var(--text);font-family:var(--mono);font-size:11px;outline:none;letter-spacing:0.08em"/>
+      </div>
       <div id="modal-loading"></div>
       <div id="printings-grid"></div>
     </div>
@@ -466,6 +478,8 @@ let collection = {};
 let apiKey = '';
 let pokemonList = []; // [{id, name, sprite}]
 let currentPokemon = null;
+let currentModalCards = [];
+
 let currentView = 'dex';
 
 function loadData() {
@@ -605,10 +619,28 @@ async function openModal(pokeId) {
       dbPutBulk('cards', lean);
     }
     document.getElementById('modal-loading').innerHTML = '';
+    document.getElementById('modal-search-wrap').style.display = 'block';
+    document.getElementById('modal-card-search').value = '';
+    currentModalCards = cards;
     renderPrintings(p.id, cards);
   } catch {
     document.getElementById('modal-loading').innerHTML = '<div style="text-align:center;padding:48px;color:var(--red);font-size:11px;letter-spacing:.12em">Failed to load. Check API key or connection.</div>';
   }
+}
+
+function filterPrintings() {
+  if (!currentPokemon || !currentModalCards.length) return;
+  const q = document.getElementById('modal-card-search').value.trim().toLowerCase();
+  if (!q) {
+    renderPrintings(currentPokemon.id, currentModalCards);
+    return;
+  }
+  const filtered = currentModalCards.filter(c =>
+    (c.number || '').toLowerCase().includes(q) ||
+    (c.set?.name || c.setName || '').toLowerCase().includes(q) ||
+    (c.name || '').toLowerCase().includes(q)
+  );
+  renderPrintings(currentPokemon.id, filtered);
 }
 
 function renderPrintings(pokeId, cards) {
@@ -748,7 +780,10 @@ function closeModal(e) {
 function _closeModal() {
   document.getElementById('modal-overlay').classList.remove('open');
   document.body.style.overflow = '';
+  document.getElementById('modal-search-wrap').style.display = 'none';
+  document.getElementById('modal-card-search').value = '';
   currentPokemon = null;
+  currentModalCards = [];
 }
 document.getElementById('modal-close').addEventListener('click', _closeModal);
 
