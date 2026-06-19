@@ -446,7 +446,7 @@
     <div id="modal-body">
       <div id="modal-search-wrap" style="display:none;padding-bottom:12px">
         <div style="display:flex;gap:6px;align-items:center">
-          <input id="modal-card-search" type="text" placeholder="Filter by card number e.g. 087 or 087/196..."
+          <input id="modal-card-search" type="text" inputmode="numeric" placeholder="Filter by card number e.g. 087 or 087/196..."
             oninput="filterPrintings()"
             style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:3px;padding:8px 12px;color:var(--text);font-family:var(--mono);font-size:11px;outline:none;letter-spacing:0.08em"/>
           <button onclick="document.getElementById('modal-card-search').value+='/';filterPrintings()"
@@ -1507,18 +1507,19 @@ let tapTimer = null;
 let lastTap = { time: 0, id: null };
 
 function handlePrintingTap(event, pokeId, cardId, name, image, setName, number) {
-  // Touch handler — detect double tap immediately, delay single tap
-  event.preventDefault(); // prevent click from also firing
+  // Dismiss keyboard first — critical so it doesn't reopen
+  document.getElementById('modal-card-search').blur();
+  document.activeElement?.blur();
+
+  event.preventDefault();
   const now = Date.now();
   const isDoubleTap = (now - lastTap.time) < 350 && lastTap.id === cardId;
   lastTap = { time: now, id: cardId };
 
   if (isDoubleTap) {
-    // Double tap — cancel pending single tap and add immediately
     if (tapTimer) { clearTimeout(tapTimer); tapTimer = null; }
     quickAddAndClose(pokeId, cardId, name, image, setName, number);
   } else {
-    // Single tap — wait to see if double tap follows
     if (tapTimer) clearTimeout(tapTimer);
     tapTimer = setTimeout(() => {
       tapTimer = null;
