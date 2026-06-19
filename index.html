@@ -216,10 +216,12 @@
 
   /* Binder visualiser */
   #binder-page-grid { display: grid; gap: 6px; padding: 4px; }
-  .binder-slot { background: var(--bg2); border: 1px solid var(--border); border-radius: 5px; aspect-ratio: 2.5/3.5; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4px; position: relative; overflow: hidden; transition: all 0.15s; }
+  .binder-slot { background: var(--bg2); border: 1px solid var(--border); border-radius: 5px; aspect-ratio: 2.5/3.5; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4px; position: relative; overflow: hidden; transition: all 0.15s; cursor: pointer; }
+  .binder-slot:hover { border-color: var(--border2); transform: translateY(-1px); }
   .binder-slot.filled { background: #0d1810; border-color: #253525; }
-  .binder-slot.empty { opacity: 0.35; }
-  .binder-slot.gen-break { border-color: var(--gold); opacity: 0.15; }
+  .binder-slot.filled:hover { border-color: #3a5a3a; }
+  .binder-slot.empty { opacity: 0.5; }
+  .binder-slot.empty:hover { opacity: 0.8; border-color: var(--gold); }
   .binder-slot img { width: 100%; height: 100%; object-fit: contain; }
   .binder-slot-num { position: absolute; bottom: 2px; left: 0; right: 0; text-align: center; font-size: 7px; color: var(--text3); letter-spacing: 0.05em; background: rgba(8,8,16,0.7); padding: 1px 0; }
   .binder-slot-name { position: absolute; bottom: 12px; left: 0; right: 0; text-align: center; font-size: 6px; color: var(--text2); letter-spacing: 0.04em; padding: 0 2px; line-height: 1.2; display: none; }
@@ -1023,7 +1025,17 @@ function _closeModal() {
 }
 document.getElementById('modal-close').addEventListener('click', _closeModal);
 
-// ── Add Card flow ─────────────────────────────────────────────────────────────
+function openAddCardForPokemon(pokeId, name) {
+  openAddCard();
+  // Pre-fill the search and trigger results
+  setTimeout(() => {
+    const input = document.getElementById('add-search');
+    input.value = name;
+    searchAddCard();
+  }, 50);
+}
+
+
 let addCardTarget = null; // pokemon object when showing printings
 
 function openAddCard() {
@@ -1631,8 +1643,11 @@ function renderBinderPage() {
       const owned = slot.owned;
       const dispCard = owned ? (getOwned(p.id).find(c => c.id === getDisplay(p.id)) || getOwned(p.id)[0]) : null;
       const imgSrc = dispCard?.image || p.sprite;
-      return `<div class="binder-slot ${owned?'filled':'empty'}" style="${isHighlighted ? 'border-color:var(--gold);box-shadow:0 0 12px rgba(200,169,110,0.4);opacity:1' : binderHighlightId ? 'opacity:0.25' : ''}">
-        ${owned ? '<div class="binder-slot-owned-dot"></div>' : ''}
+      return `<div class="binder-slot ${owned?'filled':'empty'}"
+        onclick="${owned ? `openModal(${p.id})` : `openAddCardForPokemon(${p.id},'${p.name.replace(/'/g,"\\'")}')`}"
+        title="${owned ? 'Tap to manage cards' : 'Tap to add a card'}"
+        style="${isHighlighted ? 'border-color:var(--gold);box-shadow:0 0 12px rgba(200,169,110,0.4);opacity:1' : binderHighlightId ? 'opacity:0.25' : ''}">
+        ${owned ? '<div class="binder-slot-owned-dot"></div>' : '<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:16px;opacity:0.3">＋</div>'}
         ${imgSrc ? `<img src="${imgSrc}" alt="${p.name}" loading="lazy" style="${owned?'':'filter:grayscale(1) brightness(0.3)'}" onerror="this.style.display='none'">` : ''}
         <div class="binder-slot-name">${p.name}</div>
         <div class="binder-slot-num">#${String(p.id).padStart(3,'0')}</div>
