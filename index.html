@@ -214,7 +214,22 @@
   .filter-opt-btn.active { background: var(--gold); color: var(--bg); border-color: var(--gold); }
   #filter-btn.filtered { color: var(--gold); border-color: var(--gold); }
 
-  /* Sets view */
+  /* Binder visualiser */
+  #binder-page-grid { display: grid; gap: 6px; padding: 4px; }
+  .binder-slot { background: var(--bg2); border: 1px solid var(--border); border-radius: 5px; aspect-ratio: 2.5/3.5; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4px; position: relative; overflow: hidden; transition: all 0.15s; }
+  .binder-slot.filled { background: #0d1810; border-color: #253525; }
+  .binder-slot.empty { opacity: 0.35; }
+  .binder-slot.gen-break { border-color: var(--gold); opacity: 0.15; }
+  .binder-slot img { width: 100%; height: 100%; object-fit: contain; }
+  .binder-slot-num { position: absolute; bottom: 2px; left: 0; right: 0; text-align: center; font-size: 7px; color: var(--text3); letter-spacing: 0.05em; background: rgba(8,8,16,0.7); padding: 1px 0; }
+  .binder-slot-name { position: absolute; bottom: 12px; left: 0; right: 0; text-align: center; font-size: 6px; color: var(--text2); letter-spacing: 0.04em; padding: 0 2px; line-height: 1.2; display: none; }
+  .binder-slot.filled .binder-slot-name { display: block; }
+  .binder-slot-owned-dot { position: absolute; top: 3px; right: 3px; width: 5px; height: 5px; border-radius: 50%; background: var(--green); }
+
+  /* Binder table (kept for set mode fallback) */
+  #binder-table { width: 100%; border-collapse: collapse; font-size: 11px; display: none; }
+
+
   #sets-view { display: none; }
   #sets-view.active { display: block; }
   #sets-search-wrap { padding: 10px 14px; border-bottom: 1px solid var(--border); position: sticky; top: 57px; z-index: 40; background: rgba(8,8,16,0.92); backdrop-filter: blur(10px); display: flex; gap: 8px; align-items: center; }
@@ -293,6 +308,25 @@
   <button id="install-btn" style="padding:6px 12px;font-size:10px;letter-spacing:0.12em;font-family:var(--mono);background:var(--green);color:#000;border:none;border-radius:3px;cursor:pointer;flex-shrink:0">INSTALL</button>
   <button onclick="dismissInstall()" style="background:none;border:none;color:var(--text3);font-size:16px;cursor:pointer;flex-shrink:0;padding:0 4px">✕</button>
 </div>
+
+<!-- New Set Banner -->
+<div id="new-set-banner" style="display:none;background:#0d1a10;border-bottom:1px solid #2a4a3a;padding:10px 16px;align-items:center;gap:10px;position:relative;z-index:55">
+  <div style="flex:1;font-size:10px;color:var(--text);letter-spacing:0.08em" id="new-set-banner-text"></div>
+  <button onclick="switchView('settings');closeNewSetBanner()" style="padding:5px 12px;font-size:9px;letter-spacing:0.12em;font-family:var(--mono);background:var(--green);color:#000;border:none;border-radius:3px;cursor:pointer;flex-shrink:0">UPDATE</button>
+  <button onclick="closeNewSetBanner()" style="background:none;border:none;color:var(--text3);font-size:16px;cursor:pointer;flex-shrink:0;padding:0 4px">✕</button>
+</div>
+
+<!-- Tip Popup -->
+<div id="tip-popup" style="display:none;position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:400;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:14px 16px;max-width:300px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.6)">
+  <div style="font-size:10px;color:var(--gold);letter-spacing:0.15em;margin-bottom:6px">💡 TIP</div>
+  <div style="font-size:11px;color:var(--text);line-height:1.6;margin-bottom:12px">Download card data for faster browsing. Once downloaded, Pokémon cards load instantly.</div>
+  <div style="display:flex;gap:8px">
+    <button onclick="switchView('settings');closeTipPopup()" style="flex:1;padding:7px;font-size:10px;letter-spacing:0.12em;font-family:var(--mono);background:var(--gold);color:var(--bg);border:none;border-radius:3px;cursor:pointer">GO TO SETTINGS</button>
+    <button onclick="closeTipPopup()" style="padding:7px 12px;font-size:10px;font-family:var(--mono);background:transparent;color:var(--text2);border:1px solid var(--border2);border-radius:3px;cursor:pointer">LATER</button>
+  </div>
+</div>
+
+
 
 
 <div id="header">
@@ -385,13 +419,24 @@
   <div id="binder-table-wrap">
     <div id="binder-dex-search-wrap" style="padding-bottom:12px">
       <input id="binder-dex-search" type="text" placeholder="Search Pokémon name..."
-        oninput="renderBinder()"
+        oninput="binderCurrentPage=1;renderBinder()"
         style="width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:3px;padding:8px 12px;color:var(--text);font-family:var(--mono);font-size:11px;outline:none;letter-spacing:0.08em"/>
     </div>
-    <table id="binder-table">
-      <thead><tr id="binder-thead-row"><th>#</th><th>POKÉMON</th><th>OWNED</th><th>PAGE</th><th>SLOT</th></tr></thead>
-      <tbody id="binder-tbody"></tbody>
-    </table>
+    <!-- Binder visualiser -->
+    <div id="binder-viz-wrap">
+      <div id="binder-page-nav" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:8px">
+        <button id="binder-prev" onclick="binderChangePage(-1)" style="padding:6px 14px;font-size:12px;font-family:var(--mono);background:var(--bg3);border:1px solid var(--border2);color:var(--text2);border-radius:3px;cursor:pointer;flex-shrink:0">←</button>
+        <div style="display:flex;align-items:center;gap:6px;flex:1;justify-content:center">
+          <div id="binder-page-label" style="font-size:11px;color:var(--gold);letter-spacing:0.15em;white-space:nowrap"></div>
+          <input id="binder-page-jump" type="text" inputmode="numeric" placeholder="Go to..."
+            onkeydown="if(event.key==='Enter'){binderJumpToPage(this.value);this.blur();}"
+            onblur="binderJumpToPage(this.value)"
+            style="width:64px;background:var(--bg3);border:1px solid var(--border2);border-radius:3px;padding:4px 8px;color:var(--text);font-family:var(--mono);font-size:11px;outline:none;text-align:center"/>
+        </div>
+        <button id="binder-next" onclick="binderChangePage(1)" style="padding:6px 14px;font-size:12px;font-family:var(--mono);background:var(--bg3);border:1px solid var(--border2);color:var(--text2);border-radius:3px;cursor:pointer;flex-shrink:0">→</button>
+      </div>
+      <div id="binder-page-grid"></div>
+    </div>
   </div>
 </div>
 
@@ -402,6 +447,26 @@
   <label class="settings-label">POKÉMON TCG API KEY — get free key at dev.pokemontcg.io</label>
   <input class="settings-input" id="api-key-input" type="text" placeholder="Paste key here..."/>
   <button class="btn-primary" onclick="saveApiKey()">SAVE KEY</button>
+
+  <div style="margin-top:28px">
+    <div class="section-title">OFFLINE DATA</div>
+    <div id="download-api-warning" style="display:none;background:#1a1000;border:1px solid #c8a96e44;border-radius:4px;padding:10px 12px;font-size:10px;color:var(--gold);letter-spacing:0.08em;line-height:1.7;margin-bottom:12px">
+      ⚠ No API key set. Without one you may hit rate limits during download.<br>
+      Get a free key at <strong>dev.pokemontcg.io</strong> and save it above first.
+    </div>
+    <div id="download-status-text" style="font-size:10px;color:var(--text2);letter-spacing:0.08em;margin-bottom:10px">Not downloaded</div>
+    <div id="download-progress-wrap" style="display:none;margin-bottom:12px">
+      <div style="height:5px;background:var(--bg3);border-radius:3px;overflow:hidden;margin-bottom:6px">
+        <div id="download-progress-bar" style="height:100%;background:linear-gradient(90deg,var(--gold),var(--gold2));border-radius:3px;width:0%;transition:width 0.3s ease"></div>
+      </div>
+      <div id="download-progress-label" style="font-size:10px;color:var(--text2);letter-spacing:0.08em"></div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn-primary" id="download-data-btn" onclick="startDataDownload()">DOWNLOAD DATA</button>
+      <button class="btn-secondary" id="stop-download-btn" onclick="stopDataDownload()" style="display:none">STOP</button>
+    </div>
+    <div style="font-size:9px;color:var(--text3);margin-top:8px;letter-spacing:0.08em">Downloads all card data for faster browsing. Runs in background — keep the app open.</div>
+  </div>
 
   <div style="margin-top:28px">
     <div class="section-title">EXPORT</div>
@@ -612,7 +677,7 @@ function switchView(v) {
     if (btn.getAttribute('onclick').includes("'" + v + "'")) btn.classList.add('active');
   });
   if (v === 'binder') renderBinder();
-  if (v === 'settings') renderStats();
+  if (v === 'settings') { renderStats(); updateDownloadStatusUI(); }
   if (v === 'dex') renderGrid();
   if (v === 'sets') { if (allSets.length === 0) loadAllSets(); else renderSetsGrid(); }
 }
@@ -736,7 +801,7 @@ async function openModal(pokeId) {
   document.getElementById('modal-title').textContent = p.name.toUpperCase();
   document.getElementById('modal-owned-count').textContent = getOwned(p.id).length + ' printing(s) owned';
   document.getElementById('printings-grid').innerHTML = '';
-  document.getElementById('modal-loading').innerHTML = '<div style="text-align:center;padding:48px;color:var(--text3);letter-spacing:.15em;font-size:11px"><span class="spinner"></span>LOADING PRINTINGS...</div>';
+  document.getElementById('modal-loading').innerHTML = '<div style="text-align:center;padding:48px;color:var(--text3);letter-spacing:.15em;font-size:11px"><span class="spinner"></span>LOADING CARDS...</div>';
   document.getElementById('modal-overlay').classList.add('open');
   document.body.style.overflow = 'hidden';
 
@@ -1122,7 +1187,8 @@ function sanitiseFullNameForAPI(name) {
   return name
     .replace(/'/g, '')
     .replace(/♀/g, '-F')
-    .replace(/♂/g, '-M');
+    .replace(/♂/g, '-M')
+    .replace(/é/g, 'e'); // Flabébé -> Flabebe
 }
 
 function findPokeIdFromCardName(cardName) {
@@ -1349,6 +1415,8 @@ function closeSetDetail() {
 // ── Binder ───────────────────────────────────────────────────────────────────
 let binderMode = 'dex';
 let binderSelectedSet = null;
+let binderCurrentPage = 1;
+let binderAllSlots = []; // full computed slot list for current mode
 
 function setBinderMode(mode) {
   binderMode = mode;
@@ -1361,15 +1429,14 @@ function setBinderMode(mode) {
     setBtn.style.background = 'transparent'; setBtn.style.color = 'var(--text2)';
     setSearchWrap.style.display = 'none'; selectedLabel.style.display = 'none';
     document.getElementById('binder-dex-search-wrap').style.display = 'block';
-    document.getElementById('binder-thead-row').innerHTML = '<th>#</th><th>POKÉMON</th><th>OWNED</th><th>PAGE</th><th>SLOT</th>';
   } else {
     setBtn.style.background = 'var(--gold)'; setBtn.style.color = 'var(--bg)';
     dexBtn.style.background = 'transparent'; dexBtn.style.color = 'var(--text2)';
     setSearchWrap.style.display = 'block';
     document.getElementById('binder-dex-search-wrap').style.display = 'none';
     if (allSets.length === 0) loadAllSets().then(() => renderBinderSetDropdown());
-    document.getElementById('binder-thead-row').innerHTML = '<th>#</th><th>CARD</th><th>OWNED</th><th>PAGE</th><th>SLOT</th>';
   }
+  binderCurrentPage = 1;
   renderBinder();
 }
 
@@ -1419,82 +1486,174 @@ async function selectBinderSet(setId) {
   renderBinder();
 }
 
+function getGenPageOffsets(perPage) {
+  const offsets = {}; // offsets[gen] = first page number (1-based)
+  let currentPage = 1;
+  for (let g = 1; g <= 9; g++) {
+    offsets[g] = currentPage;
+    const [min, max] = GEN_RANGES[g];
+    const genSize = max - min + 1;
+    currentPage += Math.ceil(genSize / perPage);
+  }
+  return offsets;
+}
+
+function getPokeGen(id) {
+  for (let g = 1; g <= 9; g++) {
+    const [min, max] = GEN_RANGES[g];
+    if (id >= min && id <= max) return g;
+  }
+  return 1;
+}
+
+function buildDexSlots(perPage) {
+  // Build all slots across all pages, each gen starts fresh page
+  const offsets = getGenPageOffsets(perPage);
+  const slots = []; // { page, slot, pokemon or null, gen }
+  for (let g = 1; g <= 9; g++) {
+    const [min, max] = GEN_RANGES[g];
+    const pageStart = offsets[g];
+    for (let id = min; id <= max; id++) {
+      const posInGen = id - min;
+      const page = pageStart + Math.floor(posInGen / perPage);
+      const slot = (posInGen % perPage) + 1;
+      const pokemon = pokemonList.find(p => p.id === id) || null;
+      slots.push({ page, slot, pokemon, gen: g, owned: pokemon ? isOwned(id) : false });
+    }
+  }
+  return slots;
+}
+
+function buildSetSlots(perPage) {
+  if (!binderSelectedSet) return [];
+  const seen = new Set();
+  const unique = binderSelectedSet.cards.filter(c => { if (seen.has(c.id)) return false; seen.add(c.id); return true; });
+  const sorted = unique.sort((a, b) => {
+    const nA = parseInt((a.number||'').replace(/\D/g,'')) || 0;
+    const nB = parseInt((b.number||'').replace(/\D/g,'')) || 0;
+    if (nA !== nB) return nA - nB;
+    return (a.number||'').localeCompare(b.number||'');
+  });
+  return sorted.map((card, i) => ({
+    page: Math.floor(i / perPage) + 1,
+    slot: (i % perPage) + 1,
+    card,
+    owned: isCardOwnedInSet(card.id)
+  }));
+}
+
+function binderJumpToPage(val) {
+  const n = parseInt(val);
+  if (!n || isNaN(n)) return;
+  const totalPages = binderAllSlots.length > 0 ? Math.max(...binderAllSlots.map(s => s.page)) : 1;
+  binderCurrentPage = Math.max(1, Math.min(totalPages, n));
+  document.getElementById('binder-page-jump').value = '';
+  renderBinderPage();
+}
+
+function binderChangePage(dir) {
+  const totalPages = binderAllSlots.length > 0 ? Math.max(...binderAllSlots.map(s => s.page)) : 1;
+  binderCurrentPage = Math.max(1, Math.min(totalPages, binderCurrentPage + dir));
+  renderBinderPage();
+}
+
+function renderBinderPage() {
+  const cols = parseInt(document.getElementById('binder-cols').value);
+  const rows = parseInt(document.getElementById('binder-rows').value);
+  const perPage = cols * rows;
+  const totalPages = binderAllSlots.length > 0 ? Math.max(...binderAllSlots.map(s => s.page)) : 1;
+
+  // Update nav
+  document.getElementById('binder-page-label').textContent = `PAGE ${binderCurrentPage} OF ${totalPages}`;
+  document.getElementById('binder-prev').style.opacity = binderCurrentPage <= 1 ? '0.3' : '1';
+  document.getElementById('binder-next').style.opacity = binderCurrentPage >= totalPages ? '0.3' : '1';
+
+  // Get slots for current page
+  const pageSlots = binderAllSlots.filter(s => s.page === binderCurrentPage);
+
+  // Build full grid including empty slots
+  const grid = Array(perPage).fill(null);
+  pageSlots.forEach(s => { grid[s.slot - 1] = s; });
+
+  // Render grid
+  const gridEl = document.getElementById('binder-page-grid');
+  gridEl.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+
+  if (binderMode === 'dex') {
+    const q = (document.getElementById('binder-dex-search')?.value || '').toLowerCase();
+    gridEl.innerHTML = grid.map((slot, i) => {
+      if (!slot || !slot.pokemon) {
+        return `<div class="binder-slot empty"><div class="binder-slot-num">—</div></div>`;
+      }
+      const p = slot.pokemon;
+      const matchesSearch = !q || p.name.toLowerCase().includes(q);
+      const owned = slot.owned;
+      const dispCard = owned ? (getOwned(p.id).find(c => c.id === getDisplay(p.id)) || getOwned(p.id)[0]) : null;
+      const imgSrc = dispCard?.image || p.sprite;
+      const highlight = q && matchesSearch;
+      return `<div class="binder-slot ${owned?'filled':'empty'}" style="${highlight?'border-color:var(--gold);opacity:1':''}">
+        ${owned ? '<div class="binder-slot-owned-dot"></div>' : ''}
+        ${imgSrc ? `<img src="${imgSrc}" alt="${p.name}" loading="lazy" style="${owned?'':'filter:grayscale(1) brightness(0.3)'}" onerror="this.style.display='none'">` : ''}
+        <div class="binder-slot-name">${p.name}</div>
+        <div class="binder-slot-num">#${String(p.id).padStart(3,'0')}</div>
+      </div>`;
+    }).join('');
+  } else {
+    gridEl.innerHTML = grid.map((slot) => {
+      if (!slot) return `<div class="binder-slot empty"><div class="binder-slot-num">—</div></div>`;
+      const { card, owned } = slot;
+      const img = card.image || card.images?.small;
+      return `<div class="binder-slot ${owned?'filled':'empty'}">
+        ${owned ? '<div class="binder-slot-owned-dot"></div>' : ''}
+        ${img ? `<img src="${img}" alt="${card.name}" loading="lazy" style="${owned?'':'filter:grayscale(1) brightness(0.3)'}" onerror="this.style.display='none'">` : ''}
+        <div class="binder-slot-name">${card.name}</div>
+        <div class="binder-slot-num">#${card.number||'?'}</div>
+      </div>`;
+    }).join('');
+  }
+}
+
 function renderBinder() {
   const cols = parseInt(document.getElementById('binder-cols').value);
   const rows = parseInt(document.getElementById('binder-rows').value);
   const perPage = cols * rows;
   document.getElementById('binder-info').textContent = cols + '×' + rows + ' = ' + perPage + ' cards/page';
-  const tbody = document.getElementById('binder-tbody');
+
   if (binderMode === 'dex') {
-    const q = (document.getElementById('binder-dex-search')?.value || '').toLowerCase();
-    const ownedPokemon = pokemonList.filter(p => isOwned(p.id));
-    const filtered = ownedPokemon.filter(p =>
-      (!q || p.name.toLowerCase().includes(q)) &&
-      inGen(p.id, activeBinderGen) &&
-      passesOwnedFilter(p.id)
-    );
-    if (ownedPokemon.length === 0) { tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text3)">No cards owned yet</td></tr>'; return; }
-    if (filtered.length === 0) { tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text3)">No Pokémon found</td></tr>'; return; }
-
-    // Calculate page offsets — each generation starts on a new page
-    // Gen boundaries: work out which page each gen starts on
-    const genPageOffsets = [0]; // genPageOffsets[g] = first page of gen g (1-indexed gens)
-    for (let g = 1; g <= 9; g++) {
-      const [min, max] = GEN_RANGES[g];
-      const genSize = max - min + 1; // total slots in this gen (including unowned)
-      const pagesUsed = Math.ceil(genSize / perPage);
-      genPageOffsets[g + 1] = (genPageOffsets[g] || 1) + pagesUsed;
-    }
-    genPageOffsets[1] = 1; // Gen 1 starts on page 1
-
-    tbody.innerHTML = filtered.map(p => {
-      // Find which gen this pokemon is in
-      let pokeGen = 1;
-      for (let g = 1; g <= 9; g++) {
-        const [min, max] = GEN_RANGES[g];
-        if (p.id >= min && p.id <= max) { pokeGen = g; break; }
-      }
-      const [genMin] = GEN_RANGES[pokeGen];
-      const posInGen = p.id - genMin; // 0-based position within gen
-      const pageOffset = genPageOffsets[pokeGen] - 1; // pages before this gen
-      const page = pageOffset + Math.floor(posInGen / perPage) + 1;
-      const slot = (posInGen % perPage) + 1;
-      return `<tr>
-        <td style="color:var(--text3)">#${String(p.id).padStart(4,'0')}</td>
-        <td style="color:var(--text)">${p.name}</td>
-        <td style="color:var(--green)">✓ ${getOwned(p.id).length} card${getOwned(p.id).length!==1?'s':''}</td>
-        <td style="color:var(--gold)">${page}</td>
-        <td style="color:var(--text2)">${slot}</td>
-      </tr>`;
-    }).join('');
+    if (pokemonList.length === 0) return;
+    binderAllSlots = buildDexSlots(perPage);
   } else {
-    if (!binderSelectedSet) { tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text3)">Search and select a set above</td></tr>'; return; }
-    const seen = new Set();
-    const unique = binderSelectedSet.cards.filter(c => { if (seen.has(c.id)) return false; seen.add(c.id); return true; });
-    const sorted = unique.sort((a, b) => {
-      const nA = parseInt((a.number||'').replace(/\D/g,'')) || 0;
-      const nB = parseInt((b.number||'').replace(/\D/g,'')) || 0;
-      if (nA !== nB) return nA - nB;
-      return (a.number||'').localeCompare(b.number||'');
-    });
-    tbody.innerHTML = sorted.map((card, slotIndex) => {
-      const owned = isCardOwnedInSet(card.id);
-      const page = Math.floor(slotIndex / perPage) + 1;
-      const slot = (slotIndex % perPage) + 1;
-      return `<tr style="${owned?'':'opacity:0.45'}">
-        <td style="color:var(--text3)">#${card.number||'?'}</td>
-        <td style="color:${owned?'var(--text)':'var(--text3)'}">${card.name}</td>
-        <td style="color:${owned?'var(--green)':'var(--text3)'}">${owned?'✓ OWNED':'—'}</td>
-        <td style="color:var(--gold)">${page}</td>
-        <td style="color:var(--text2)">${slot}</td>
-      </tr>`;
-    }).join('');
+    if (!binderSelectedSet) {
+      document.getElementById('binder-page-grid').innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:32px;color:var(--text3);font-size:11px;letter-spacing:.12em">Search and select a set above</div>';
+      document.getElementById('binder-page-label').textContent = '';
+      return;
+    }
+    binderAllSlots = buildSetSlots(perPage);
   }
+
+  // Clamp current page
+  const totalPages = binderAllSlots.length > 0 ? Math.max(...binderAllSlots.map(s => s.page)) : 1;
+  binderCurrentPage = Math.min(binderCurrentPage, totalPages);
+  renderBinderPage();
 }
 
 
 
-// ── Settings ─────────────────────────────────────────────────────────────────
+// ── Binder swipe support ──────────────────────────────────────────────────────
+let binderSwipeStartX = null;
+document.addEventListener('DOMContentLoaded', () => {
+  const grid = document.getElementById('binder-page-grid');
+  if (!grid) return;
+  grid.addEventListener('touchstart', e => { binderSwipeStartX = e.touches[0].clientX; }, { passive: true });
+  grid.addEventListener('touchend', e => {
+    if (binderSwipeStartX === null) return;
+    const dx = e.changedTouches[0].clientX - binderSwipeStartX;
+    binderSwipeStartX = null;
+    if (Math.abs(dx) > 50) binderChangePage(dx < 0 ? 1 : -1);
+  }, { passive: true });
+});
+
+
 function saveApiKey() {
   apiKey = document.getElementById('api-key-input').value.trim();
   localStorage.setItem(API_KEY_STORAGE, apiKey);
@@ -1642,6 +1801,68 @@ function dbClearStore(store) {
 }
 
 // ── Load Pokémon list ─────────────────────────────────────────────────────────
+// ── Pokémon name normalisation ────────────────────────────────────────────────
+// Forms to strip — keep just the base name
+const FORM_SUFFIXES = [
+  'altered','origin','land','sky','red-striped','blue-striped',
+  'plant','sandy','trash','heat','wash','frost','fan','mow',
+  'normal','attack','defense','speed','ordinary','resolute',
+  'aria','pirouette','incarnate','therian','black','white',
+  'baile','pom-pom','pau','sensu','midday','midnight','dusk',
+  'solo','school','shield','blade','red-meteor','blue-meteor',
+  'green-meteor','indigo-meteor','violet-meteor','yellow-meteor',
+  'orange-meteor','red','blue','green','yellow',
+  'dusk-mane','dawn-wings','ultra','50','10','complete',
+  'single-strike','rapid-strike','ice-rider','shadow-rider',
+  'male','female','east','west','average','small',
+  'disguised','busted','hangry','gorging','gulping','noice',
+  'confined','unbound','meteor','core','low-key','amped',
+  'crowned','eternamax','full-belly','zero',
+];
+
+// Names where hyphens are part of the actual name
+const HYPHEN_NAMES = new Set([
+  'jangmo-o','hakamo-o','kommo-o','ho-oh','porygon-z',
+  'mr-mime','mr-rime','mime-jr','type-null',
+]);
+
+// Apostrophe restorations
+const APOSTROPHE_NAMES = {
+  'farfetchd': "Farfetch'd",
+  'sirfetchd': "Sirfetch'd",
+};
+
+function normalisePokemonName(rawName) {
+  const lower = rawName.toLowerCase();
+
+  // Restore apostrophes
+  if (APOSTROPHE_NAMES[lower]) return APOSTROPHE_NAMES[lower];
+
+  // Nidoran special cases
+  if (lower === 'nidoran-f') return 'Nidoran♀';
+  if (lower === 'nidoran-m') return 'Nidoran♂';
+
+  // Flabébé
+  if (lower === 'flabebe') return 'Flabébé';
+
+  // Names where hyphens belong
+  if (HYPHEN_NAMES.has(lower)) {
+    return rawName.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('-');
+  }
+
+  // Strip known form suffixes
+  for (const suffix of FORM_SUFFIXES) {
+    if (lower.endsWith('-' + suffix)) {
+      const base = rawName.slice(0, rawName.length - suffix.length - 1);
+      // Recurse in case there are nested suffixes
+      return normalisePokemonName(base);
+    }
+  }
+
+  // Default — capitalise first letter, replace remaining hyphens with spaces
+  return rawName.charAt(0).toUpperCase() + rawName.slice(1).replace(/-/g, ' ');
+}
+
 async function loadPokemonList() {
   document.getElementById('grid').innerHTML = '<div class="empty-state"><span class="spinner"></span>LOADING POKÉDEX...</div>';
 
@@ -1660,7 +1881,7 @@ async function loadPokemonList() {
     const data = await res.json();
     pokemonList = data.results.map((p, i) => ({
       id: i + 1,
-      name: p.name.charAt(0).toUpperCase() + p.name.slice(1).replace(/-/g, ' '),
+      name: normalisePokemonName(p.name),
       sprite: `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${i + 1}.png`
     }));
     dbPutBulk('pokemon', pokemonList); // save for next time
@@ -1677,6 +1898,10 @@ async function init() {
   loadSetsMeta();
   await openDB();
   await loadPokemonList();
+  updateDownloadStatusUI();
+  maybeShowTipPopup();
+  // Check for new sets after a short delay so app loads first
+  setTimeout(checkForNewSets, 5000);
 }
 
 init();
@@ -1724,7 +1949,174 @@ if (isIOS && !isInStandaloneMode && !localStorage.getItem('installDismissed')) {
     alert('To install:\n1. Tap the Share button (box with arrow)\n2. Scroll down and tap "Add to Home Screen"\n3. Tap "Add"');
   }, { once: true });
 }
+// ── Data download ─────────────────────────────────────────────────────────────
+const DOWNLOAD_META_KEY = 'sgc_download_meta'; // { lastDownload, downloadedSets: [] }
+let downloadRunning = false;
+let downloadShouldStop = false;
 
+function getDownloadMeta() {
+  try { return JSON.parse(localStorage.getItem(DOWNLOAD_META_KEY) || '{"lastDownload":null,"downloadedSets":[]}'); } catch { return { lastDownload: null, downloadedSets: [] }; }
+}
+function saveDownloadMeta(meta) { localStorage.setItem(DOWNLOAD_META_KEY, JSON.stringify(meta)); }
+
+function updateDownloadStatusUI() {
+  const meta = getDownloadMeta();
+  const el = document.getElementById('download-status-text');
+  if (!el) return;
+  if (meta.lastDownload) {
+    const d = new Date(meta.lastDownload);
+    const sets = meta.downloadedSets?.length || 0;
+    el.textContent = `Last downloaded: ${d.toLocaleDateString()} ${d.toLocaleTimeString()} · ${sets} sets cached`;
+  } else {
+    el.textContent = 'Not downloaded yet';
+  }
+  // Show API key warning if no key set
+  const warn = document.getElementById('download-api-warning');
+  if (warn) warn.style.display = apiKey ? 'none' : 'block';
+}
+
+async function startDataDownload() {
+  if (downloadRunning) return;
+  downloadRunning = true;
+  downloadShouldStop = false;
+  document.getElementById('download-data-btn').style.display = 'none';
+  document.getElementById('stop-download-btn').style.display = 'inline-block';
+  document.getElementById('download-progress-wrap').style.display = 'block';
+
+  const headers = {}; if (apiKey) headers['X-Api-Key'] = apiKey;
+  const meta = getDownloadMeta();
+  const alreadyDownloaded = new Set(meta.downloadedSets || []);
+
+  try {
+    // Fetch all sets
+    setDownloadProgress('Fetching set list...', 0);
+    const setsRes = await fetch(`${TCG_BASE}/sets?orderBy=-releaseDate&pageSize=500`, { headers });
+    const setsData = await setsRes.json();
+    const sets = setsData.data || [];
+    const toDownload = sets.filter(s => !alreadyDownloaded.has(s.id));
+
+    if (toDownload.length === 0) {
+      setDownloadProgress('All sets already cached!', 100);
+      meta.lastDownload = new Date().toISOString();
+      saveDownloadMeta(meta);
+      updateDownloadStatusUI();
+      finishDownload();
+      return;
+    }
+
+    let done = 0;
+    for (const set of toDownload) {
+      if (downloadShouldStop) break;
+      const pct = Math.round((done / toDownload.length) * 100);
+      setDownloadProgress(`Downloading: ${set.name} (${done + 1}/${toDownload.length})`, pct);
+      try {
+        let cards = [], page = 1, totalCount = Infinity;
+        while (cards.length < totalCount) {
+          if (downloadShouldStop) break;
+          const res = await fetch(`${TCG_BASE}/cards?q=set.id:${set.id}&pageSize=250&page=${page}&orderBy=number`, { headers });
+          const data = await res.json();
+          totalCount = data.totalCount || 0;
+          const batch = data.data || [];
+          if (batch.length === 0) break;
+          const lean = batch.map(c => ({ id: c.id, name: c.name, number: c.number, setId: set.id, setName: set.name, image: c.images?.small || null }));
+          dbPutBulk('cards', lean);
+          setCardsCache[set.id] = (setCardsCache[set.id] || []).concat(batch);
+          cards = cards.concat(lean);
+          page++;
+          // Small delay to avoid hammering API
+          await new Promise(r => setTimeout(r, 120));
+        }
+        if (!downloadShouldStop) {
+          alreadyDownloaded.add(set.id);
+          meta.downloadedSets = [...alreadyDownloaded];
+          meta.lastDownload = new Date().toISOString();
+          saveDownloadMeta(meta);
+        }
+      } catch { /* skip failed set, continue */ }
+      done++;
+    }
+
+    if (!downloadShouldStop) {
+      setDownloadProgress('Download complete! 🎉', 100);
+      updateDownloadStatusUI();
+    } else {
+      setDownloadProgress('Download stopped', Math.round((done / toDownload.length) * 100));
+    }
+  } catch (err) {
+    setDownloadProgress('Download failed — check connection', 0);
+  }
+  finishDownload();
+}
+
+function setDownloadProgress(label, pct) {
+  const bar = document.getElementById('download-progress-bar');
+  const lbl = document.getElementById('download-progress-label');
+  if (bar) bar.style.width = pct + '%';
+  if (lbl) lbl.textContent = label;
+}
+
+function stopDataDownload() {
+  downloadShouldStop = true;
+}
+
+function finishDownload() {
+  downloadRunning = false;
+  setTimeout(() => {
+    document.getElementById('download-data-btn').style.display = 'inline-block';
+    document.getElementById('stop-download-btn').style.display = 'none';
+    document.getElementById('download-progress-wrap').style.display = 'none';
+  }, 2000);
+}
+
+// ── New set detection ─────────────────────────────────────────────────────────
+async function checkForNewSets() {
+  const meta = getDownloadMeta();
+  if (!meta.lastDownload) return; // never downloaded, skip
+  const downloadedSets = new Set(meta.downloadedSets || []);
+  if (downloadedSets.size === 0) return;
+  try {
+    const headers = {}; if (apiKey) headers['X-Api-Key'] = apiKey;
+    const res = await fetch(`${TCG_BASE}/sets?orderBy=-releaseDate&pageSize=50`, { headers });
+    const data = await res.json();
+    const latest = data.data || [];
+    const newSets = latest.filter(s => !downloadedSets.has(s.id));
+    if (newSets.length > 0 && !localStorage.getItem('newSetBannerDismissed_' + newSets[0].id)) {
+      const names = newSets.slice(0, 3).map(s => s.name).join(', ');
+      const more = newSets.length > 3 ? ` +${newSets.length - 3} more` : '';
+      document.getElementById('new-set-banner-text').textContent = `🆕 New set${newSets.length > 1 ? 's' : ''} available: ${names}${more} — update your data for faster loading`;
+      document.getElementById('new-set-banner').style.display = 'flex';
+    }
+  } catch { /* silent fail */ }
+}
+
+function closeNewSetBanner() {
+  const banner = document.getElementById('new-set-banner');
+  banner.style.display = 'none';
+  // Remember dismissal until next new set
+  const meta = getDownloadMeta();
+  if (meta.downloadedSets?.length) {
+    // We'll use first non-downloaded set id as key — just suppress for session
+    localStorage.setItem('newSetBannerDismissed_session', '1');
+  }
+}
+
+// ── Tip popup ─────────────────────────────────────────────────────────────────
+function closeTipPopup() {
+  document.getElementById('tip-popup').style.display = 'none';
+  localStorage.setItem('tipPopupDismissed', '1');
+}
+
+function maybeShowTipPopup() {
+  const meta = getDownloadMeta();
+  if (meta.lastDownload) return; // already downloaded, no tip needed
+  if (localStorage.getItem('tipPopupDismissed')) return;
+  // Show after 2 minutes
+  setTimeout(() => {
+    if (!localStorage.getItem('tipPopupDismissed')) {
+      document.getElementById('tip-popup').style.display = 'block';
+    }
+  }, 2 * 60 * 1000);
+}
 
 
 </script>
