@@ -821,9 +821,8 @@ function renderPrintings(pokeId, cards) {
     const safeName = (card.name||'').replace(/'/g,"\\'");
     const safeSet = (card.set?.name||card.setName||'').replace(/'/g,"\\'");
     return `<div class="printing ${owned?'owned':''} ${isDisp?'is-display':''}" id="pr-${card.id}"
-      onclick="${owned ? `setDisplayCard('${pokeId}','${card.id}')` : `markOwned('${pokeId}','${card.id}','${safeName}','${img||''}','${safeSet}','${card.number||''}')`}"
-      ontouchend="${!owned ? `handleDoubleTap(event,'${pokeId}','${card.id}','${safeName}','${img||''}','${safeSet}','${card.number||''}')` : ''}"
-      ondblclick="${!owned ? `handleDoubleTap(event,'${pokeId}','${card.id}','${safeName}','${img||''}','${safeSet}','${card.number||''}')` : ''}"
+      ontouchend="${owned ? `setDisplayCard('${pokeId}','${card.id}')` : `handlePrintingTap(event,'${pokeId}','${card.id}','${safeName}','${img||''}','${safeSet}','${card.number||''}')`}"
+      onclick="${owned ? `setDisplayCard('${pokeId}','${card.id}')` : `handlePrintingClick(event,'${pokeId}','${card.id}','${safeName}','${img||''}','${safeSet}','${card.number||''}')`}"
       title="${owned ? 'Click to set as display · Double-tap to confirm' : 'Click to add · Double-tap to add and return to DEX'}">
       ${isDisp ? '<div class="display-badge">DISPLAY</div>' : ''}
       ${!owned ? '<div class="lock-icon">🔒</div>' : ''}
@@ -1503,17 +1502,36 @@ function resetCollection() {
 }
 
 // ── Export ───────────────────────────────────────────────────────────────────
-// ── Quick add and close (double-tap) ─────────────────────────────────────────
+// ── Tap handlers for printing cards ──────────────────────────────────────────
+let tapTimer = null;
 let lastTap = { time: 0, id: null };
 
-function handleDoubleTap(event, pokeId, cardId, name, image, setName, number) {
+function handlePrintingTap(event, pokeId, cardId, name, image, setName, number) {
+  // Touch handler — detect double tap immediately, delay single tap
+  event.preventDefault(); // prevent click from also firing
   const now = Date.now();
   const isDoubleTap = (now - lastTap.time) < 350 && lastTap.id === cardId;
   lastTap = { time: now, id: cardId };
+
   if (isDoubleTap) {
-    event.stopPropagation();
-    event.preventDefault();
+    // Double tap — cancel pending single tap and add immediately
+    if (tapTimer) { clearTimeout(tapTimer); tapTimer = null; }
     quickAddAndClose(pokeId, cardId, name, image, setName, number);
+  } else {
+    // Single tap — wait to see if double tap follows
+    if (tapTimer) clearTimeout(tapTimer);
+    tapTimer = setTimeout(() => {
+      tapTimer = null;
+      markOwned(pokeId, cardId, name, image, setName, number);
+    }, 350);
+  }
+}
+
+function handlePrintingClick(event, pokeId, cardId, name, image, setName, number) {
+  // Click handler for desktop (no touch) — immediate
+  // On touch devices this fires after ontouchend so we ignore it
+  if (event.sourceCapabilities && !event.sourceCapabilities.firesTouchEvents) {
+    markOwned(pokeId, cardId, name, image, setName, number);
   }
 }
 
