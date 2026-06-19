@@ -203,6 +203,10 @@
   /* Canvas (hidden) */
   #capture-canvas { display: none; }
 
+  .gen-btn { padding: 3px 8px; font-size: 9px; letter-spacing: 0.1em; font-family: var(--mono); background: transparent; color: var(--text3); border: 1px solid var(--border); border-radius: 2px; cursor: pointer; transition: all 0.15s; }
+  .gen-btn:hover { color: var(--text2); border-color: var(--border2); }
+  .gen-btn.active { background: var(--gold); color: var(--bg); border-color: var(--gold); }
+
   /* Sets view */
   #sets-view { display: none; }
   #sets-view.active { display: block; }
@@ -291,6 +295,18 @@
 <div id="dex-view" class="view-section active">
   <div id="search-wrap">
     <input id="search" type="text" placeholder="Search by name or number..." oninput="renderGrid()"/>
+    <div id="gen-filter" style="display:flex;gap:5px;margin-top:8px;flex-wrap:wrap">
+      <button class="gen-btn active" onclick="setGenFilter(0)">ALL</button>
+      <button class="gen-btn" onclick="setGenFilter(1)">GEN 1</button>
+      <button class="gen-btn" onclick="setGenFilter(2)">GEN 2</button>
+      <button class="gen-btn" onclick="setGenFilter(3)">GEN 3</button>
+      <button class="gen-btn" onclick="setGenFilter(4)">GEN 4</button>
+      <button class="gen-btn" onclick="setGenFilter(5)">GEN 5</button>
+      <button class="gen-btn" onclick="setGenFilter(6)">GEN 6</button>
+      <button class="gen-btn" onclick="setGenFilter(7)">GEN 7</button>
+      <button class="gen-btn" onclick="setGenFilter(8)">GEN 8</button>
+      <button class="gen-btn" onclick="setGenFilter(9)">GEN 9</button>
+    </div>
   </div>
   <div id="grid"></div>
 </div>
@@ -359,6 +375,23 @@
     <div id="binder-selected-set-label" style="display:none;font-size:10px;color:var(--gold);letter-spacing:.1em"></div>
   </div>
   <div id="binder-table-wrap">
+    <div id="binder-dex-search-wrap" style="padding-bottom:12px">
+      <input id="binder-dex-search" type="text" placeholder="Search Pokémon name..."
+        oninput="renderBinder()"
+        style="width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:3px;padding:8px 12px;color:var(--text);font-family:var(--mono);font-size:11px;outline:none;letter-spacing:0.08em;margin-bottom:8px"/>
+      <div style="display:flex;gap:5px;flex-wrap:wrap">
+        <button class="gen-btn active" onclick="setBinderGenFilter(0)">ALL</button>
+        <button class="gen-btn" onclick="setBinderGenFilter(1)">GEN 1</button>
+        <button class="gen-btn" onclick="setBinderGenFilter(2)">GEN 2</button>
+        <button class="gen-btn" onclick="setBinderGenFilter(3)">GEN 3</button>
+        <button class="gen-btn" onclick="setBinderGenFilter(4)">GEN 4</button>
+        <button class="gen-btn" onclick="setBinderGenFilter(5)">GEN 5</button>
+        <button class="gen-btn" onclick="setBinderGenFilter(6)">GEN 6</button>
+        <button class="gen-btn" onclick="setBinderGenFilter(7)">GEN 7</button>
+        <button class="gen-btn" onclick="setBinderGenFilter(8)">GEN 8</button>
+        <button class="gen-btn" onclick="setBinderGenFilter(9)">GEN 9</button>
+      </div>
+    </div>
     <table id="binder-table">
       <thead><tr id="binder-thead-row"><th>#</th><th>POKÉMON</th><th>OWNED</th><th>PAGE</th><th>SLOT</th></tr></thead>
       <tbody id="binder-tbody"></tbody>
@@ -409,7 +442,7 @@
     </div>
     <div id="modal-body">
       <div id="modal-search-wrap" style="display:none;padding-bottom:12px">
-        <input id="modal-card-search" type="text" placeholder="Filter by card number or set name..."
+        <input id="modal-card-search" type="text" inputmode="numeric" placeholder="Filter by card number..."
           oninput="filterPrintings()"
           style="width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:3px;padding:8px 12px;color:var(--text);font-family:var(--mono);font-size:11px;outline:none;letter-spacing:0.08em"/>
       </div>
@@ -541,10 +574,49 @@ function switchView(v) {
 }
 
 // ── Grid ─────────────────────────────────────────────────────────────────────
+// ── Generation ranges ─────────────────────────────────────────────────────────
+const GEN_RANGES = [
+  null,           // 0 = All
+  [1, 151],       // Gen 1
+  [152, 251],     // Gen 2
+  [252, 386],     // Gen 3
+  [387, 493],     // Gen 4
+  [494, 649],     // Gen 5
+  [650, 721],     // Gen 6
+  [722, 809],     // Gen 7
+  [810, 905],     // Gen 8
+  [906, 1025],    // Gen 9
+];
+
+let activeGen = 0;
+let activeBinderGen = 0;
+
+function setGenFilter(gen) {
+  activeGen = gen;
+  document.querySelectorAll('#gen-filter .gen-btn').forEach((btn, i) => {
+    btn.classList.toggle('active', i === gen);
+  });
+  renderGrid();
+}
+
+function setBinderGenFilter(gen) {
+  activeBinderGen = gen;
+  const binderGenBtns = document.querySelectorAll('#binder-dex-search-wrap .gen-btn');
+  binderGenBtns.forEach((btn, i) => btn.classList.toggle('active', i === gen));
+  renderBinder();
+}
+
+function inGen(pokeId, gen) {
+  if (!gen) return true;
+  const [min, max] = GEN_RANGES[gen];
+  return pokeId >= min && pokeId <= max;
+}
+
 function renderGrid() {
   const q = document.getElementById('search').value.toLowerCase();
   const filtered = pokemonList.filter(p =>
-    p.name.toLowerCase().includes(q) || String(p.id).includes(q)
+    (p.name.toLowerCase().includes(q) || String(p.id).includes(q)) &&
+    inGen(p.id, activeGen)
   );
   const grid = document.getElementById('grid');
   if (filtered.length === 0) {
@@ -635,11 +707,17 @@ function filterPrintings() {
     renderPrintings(currentPokemon.id, currentModalCards);
     return;
   }
-  const filtered = currentModalCards.filter(c =>
-    (c.number || '').toLowerCase().includes(q) ||
-    (c.set?.name || c.setName || '').toLowerCase().includes(q) ||
-    (c.name || '').toLowerCase().includes(q)
-  );
+  // Strip leading zeros for comparison so "087" matches "87"
+  const qNum = q.replace(/^0+/, '');
+  const filtered = currentModalCards.filter(c => {
+    const num = (c.number || '').toLowerCase();
+    const numStripped = num.replace(/^0+/, '');
+    // Match full format "087/196", just the number "87" or "087", or set name
+    return num.includes(q) ||
+      numStripped.startsWith(qNum) ||
+      (c.set?.name || c.setName || '').toLowerCase().includes(q) ||
+      (c.name || '').toLowerCase().includes(q);
+  });
   renderPrintings(currentPokemon.id, filtered);
 }
 
@@ -1161,11 +1239,13 @@ function setBinderMode(mode) {
     dexBtn.style.background = 'var(--gold)'; dexBtn.style.color = 'var(--bg)';
     setBtn.style.background = 'transparent'; setBtn.style.color = 'var(--text2)';
     setSearchWrap.style.display = 'none'; selectedLabel.style.display = 'none';
+    document.getElementById('binder-dex-search-wrap').style.display = 'block';
     document.getElementById('binder-thead-row').innerHTML = '<th>#</th><th>POKÉMON</th><th>OWNED</th><th>PAGE</th><th>SLOT</th>';
   } else {
     setBtn.style.background = 'var(--gold)'; setBtn.style.color = 'var(--bg)';
     dexBtn.style.background = 'transparent'; dexBtn.style.color = 'var(--text2)';
     setSearchWrap.style.display = 'block';
+    document.getElementById('binder-dex-search-wrap').style.display = 'none';
     if (allSets.length === 0) loadAllSets().then(() => renderBinderSetDropdown());
     document.getElementById('binder-thead-row').innerHTML = '<th>#</th><th>CARD</th><th>OWNED</th><th>PAGE</th><th>SLOT</th>';
   }
@@ -1225,10 +1305,16 @@ function renderBinder() {
   document.getElementById('binder-info').textContent = cols + '×' + rows + ' = ' + perPage + ' cards/page';
   const tbody = document.getElementById('binder-tbody');
   if (binderMode === 'dex') {
+    const q = (document.getElementById('binder-dex-search')?.value || '').toLowerCase();
     const ownedPokemon = pokemonList.filter(p => isOwned(p.id));
+    const filtered = ownedPokemon.filter(p =>
+      (!q || p.name.toLowerCase().includes(q)) &&
+      inGen(p.id, activeBinderGen)
+    );
     if (ownedPokemon.length === 0) { tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text3)">No cards owned yet</td></tr>'; return; }
-    tbody.innerHTML = ownedPokemon.map(p => {
-      const slotIndex = p.id - 1;
+    if (filtered.length === 0) { tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text3)">No Pokémon found</td></tr>'; return; }
+    tbody.innerHTML = filtered.map(p => {
+      const slotIndex = p.id - 1; // always absolute dex position
       const page = Math.floor(slotIndex / perPage) + 1;
       const slot = (slotIndex % perPage) + 1;
       return `<tr>
