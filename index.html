@@ -450,6 +450,7 @@
         <div style="display:flex;gap:6px;align-items:center">
           <input id="modal-card-search" type="text" inputmode="decimal" placeholder="e.g. 087 or 087/196..."
             oninput="filterPrintings()"
+            onkeydown="if(event.key==='Enter'||event.key==='Go'){event.preventDefault();this.blur();}"
             style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:3px;padding:8px 12px;color:var(--text);font-family:var(--mono);font-size:11px;outline:none;letter-spacing:0.08em"/>
           <button onclick="document.getElementById('modal-card-search').value+='/';filterPrintings()"
             style="padding:8px 10px;background:var(--bg3);border:1px solid var(--border2);border-radius:3px;color:var(--gold);font-family:var(--mono);font-size:13px;cursor:pointer;flex-shrink:0">/</button>
@@ -1434,10 +1435,30 @@ function renderBinder() {
     );
     if (ownedPokemon.length === 0) { tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text3)">No cards owned yet</td></tr>'; return; }
     if (filtered.length === 0) { tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text3)">No Pokémon found</td></tr>'; return; }
+
+    // Calculate page offsets — each generation starts on a new page
+    // Gen boundaries: work out which page each gen starts on
+    const genPageOffsets = [0]; // genPageOffsets[g] = first page of gen g (1-indexed gens)
+    for (let g = 1; g <= 9; g++) {
+      const [min, max] = GEN_RANGES[g];
+      const genSize = max - min + 1; // total slots in this gen (including unowned)
+      const pagesUsed = Math.ceil(genSize / perPage);
+      genPageOffsets[g + 1] = (genPageOffsets[g] || 1) + pagesUsed;
+    }
+    genPageOffsets[1] = 1; // Gen 1 starts on page 1
+
     tbody.innerHTML = filtered.map(p => {
-      const slotIndex = p.id - 1; // always absolute dex position
-      const page = Math.floor(slotIndex / perPage) + 1;
-      const slot = (slotIndex % perPage) + 1;
+      // Find which gen this pokemon is in
+      let pokeGen = 1;
+      for (let g = 1; g <= 9; g++) {
+        const [min, max] = GEN_RANGES[g];
+        if (p.id >= min && p.id <= max) { pokeGen = g; break; }
+      }
+      const [genMin] = GEN_RANGES[pokeGen];
+      const posInGen = p.id - genMin; // 0-based position within gen
+      const pageOffset = genPageOffsets[pokeGen] - 1; // pages before this gen
+      const page = pageOffset + Math.floor(posInGen / perPage) + 1;
+      const slot = (posInGen % perPage) + 1;
       return `<tr>
         <td style="color:var(--text3)">#${String(p.id).padStart(4,'0')}</td>
         <td style="color:var(--text)">${p.name}</td>
