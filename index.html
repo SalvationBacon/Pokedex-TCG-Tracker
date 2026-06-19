@@ -281,7 +281,18 @@
 <body>
 <div id="app-root">
 
-<!-- Header -->
+<!-- Install Banner -->
+<div id="install-banner" style="display:none;background:#0d1a10;border-bottom:1px solid #2a4a3a;padding:10px 16px;display:none;align-items:center;gap:10px;z-index:60;position:relative">
+  <img src="icon.png" style="width:32px;height:32px;border-radius:6px;flex-shrink:0"/>
+  <div style="flex:1">
+    <div style="font-size:11px;color:var(--text);letter-spacing:0.08em">Add POKÉDEX TCG to your home screen</div>
+    <div style="font-size:9px;color:var(--text2);margin-top:2px">Works offline · App-like experience</div>
+  </div>
+  <button id="install-btn" style="padding:6px 12px;font-size:10px;letter-spacing:0.12em;font-family:var(--mono);background:var(--green);color:#000;border:none;border-radius:3px;cursor:pointer;flex-shrink:0">INSTALL</button>
+  <button onclick="dismissInstall()" style="background:none;border:none;color:var(--text3);font-size:16px;cursor:pointer;flex-shrink:0;padding:0 4px">✕</button>
+</div>
+
+
 <div id="header">
   <div id="logo">POKÉDEX TCG</div>
   <div id="progress-wrap">
@@ -811,7 +822,8 @@ function renderPrintings(pokeId, cards) {
     const safeSet = (card.set?.name||card.setName||'').replace(/'/g,"\\'");
     return `<div class="printing ${owned?'owned':''} ${isDisp?'is-display':''}" id="pr-${card.id}"
       onclick="${owned ? `setDisplayCard('${pokeId}','${card.id}')` : `markOwned('${pokeId}','${card.id}','${safeName}','${img||''}','${safeSet}','${card.number||''}')`}"
-      ondblclick="${!owned ? `event.stopPropagation();quickAddAndClose('${pokeId}','${card.id}','${safeName}','${img||''}','${safeSet}','${card.number||''}')` : ''}"
+      ontouchend="${!owned ? `handleDoubleTap(event,'${pokeId}','${card.id}','${safeName}','${img||''}','${safeSet}','${card.number||''}')` : ''}"
+      ondblclick="${!owned ? `handleDoubleTap(event,'${pokeId}','${card.id}','${safeName}','${img||''}','${safeSet}','${card.number||''}')` : ''}"
       title="${owned ? 'Click to set as display · Double-tap to confirm' : 'Click to add · Double-tap to add and return to DEX'}">
       ${isDisp ? '<div class="display-badge">DISPLAY</div>' : ''}
       ${!owned ? '<div class="lock-icon">🔒</div>' : ''}
@@ -1492,6 +1504,19 @@ function resetCollection() {
 
 // ── Export ───────────────────────────────────────────────────────────────────
 // ── Quick add and close (double-tap) ─────────────────────────────────────────
+let lastTap = { time: 0, id: null };
+
+function handleDoubleTap(event, pokeId, cardId, name, image, setName, number) {
+  const now = Date.now();
+  const isDoubleTap = (now - lastTap.time) < 350 && lastTap.id === cardId;
+  lastTap = { time: now, id: cardId };
+  if (isDoubleTap) {
+    event.stopPropagation();
+    event.preventDefault();
+    quickAddAndClose(pokeId, cardId, name, image, setName, number);
+  }
+}
+
 function quickAddAndClose(pokeId, cardId, name, image, setName, number) {
   addCard(parseInt(pokeId), { id: cardId, name, image, set: setName, number });
   showToast(name + ' added!', 'success');
@@ -1644,6 +1669,52 @@ async function init() {
 }
 
 init();
+
+let deferredInstallPrompt = null;
+
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  // Only show if not already installed and not dismissed
+  if (!localStorage.getItem('installDismissed')) {
+    const banner = document.getElementById('install-banner');
+    banner.style.display = 'flex';
+  }
+});
+
+window.addEventListener('appinstalled', () => {
+  document.getElementById('install-banner').style.display = 'none';
+  deferredInstallPrompt = null;
+});
+
+document.getElementById('install-btn').addEventListener('click', async () => {
+  if (!deferredInstallPrompt) return;
+  deferredInstallPrompt.prompt();
+  const { outcome } = await deferredInstallPrompt.userChoice;
+  if (outcome === 'accepted') {
+    document.getElementById('install-banner').style.display = 'none';
+  }
+  deferredInstallPrompt = null;
+});
+
+function dismissInstall() {
+  document.getElementById('install-banner').style.display = 'none';
+  localStorage.setItem('installDismissed', '1');
+}
+
+// iOS doesn't support beforeinstallprompt — show manual instructions
+const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+const isInStandaloneMode = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+if (isIOS && !isInStandaloneMode && !localStorage.getItem('installDismissed')) {
+  const banner = document.getElementById('install-banner');
+  banner.style.display = 'flex';
+  document.getElementById('install-btn').textContent = 'HOW TO';
+  document.getElementById('install-btn').addEventListener('click', () => {
+    alert('To install:\n1. Tap the Share button (box with arrow)\n2. Scroll down and tap "Add to Home Screen"\n3. Tap "Add"');
+  }, { once: true });
+}
+
+
 
 </script>
 </div><!-- /app-root -->
