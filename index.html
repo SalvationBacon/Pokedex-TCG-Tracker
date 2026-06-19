@@ -32,7 +32,9 @@
     --sans: 'Rajdhani', sans-serif;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--bg); color: var(--text); font-family: var(--mono); min-height: 100vh; overflow-x: hidden; }
+  html, body { height: 100%; overflow: hidden; }
+  body { background: var(--bg); color: var(--text); font-family: var(--mono); overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch; position: fixed; width: 100%; height: 100%; }
+  #app-root { height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch; }
   ::-webkit-scrollbar { width: 4px; }
   ::-webkit-scrollbar-track { background: var(--bg); }
   ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
@@ -206,6 +208,9 @@
   .gen-btn { padding: 3px 8px; font-size: 9px; letter-spacing: 0.1em; font-family: var(--mono); background: transparent; color: var(--text3); border: 1px solid var(--border); border-radius: 2px; cursor: pointer; transition: all 0.15s; }
   .gen-btn:hover { color: var(--text2); border-color: var(--border2); }
   .gen-btn.active { background: var(--gold); color: var(--bg); border-color: var(--gold); }
+  .filter-opt-btn { padding: 6px 14px; font-size: 10px; letter-spacing: 0.12em; font-family: var(--mono); background: transparent; color: var(--text2); border: 1px solid var(--border2); border-radius: 3px; cursor: pointer; transition: all 0.15s; }
+  .filter-opt-btn.active { background: var(--gold); color: var(--bg); border-color: var(--gold); }
+  #filter-btn.filtered { color: var(--gold); border-color: var(--gold); }
 
   /* Sets view */
   #sets-view { display: none; }
@@ -274,6 +279,7 @@
 </style>
 </head>
 <body>
+<div id="app-root">
 
 <!-- Header -->
 <div id="header">
@@ -289,24 +295,13 @@
     <button class="nav-btn" onclick="switchView('settings')">⚙</button>
   </div>
   <button id="add-btn" onclick="openAddCard()">+ ADD CARD</button>
+  <button id="filter-btn" onclick="openFilters()" style="padding:6px 12px;font-size:10px;letter-spacing:0.15em;font-family:var(--mono);background:var(--bg3);color:var(--text2);border:1px solid var(--border2);border-radius:2px;cursor:pointer;flex-shrink:0;transition:all 0.15s">⚡ FILTER</button>
 </div>
 
 <!-- Dex View -->
 <div id="dex-view" class="view-section active">
   <div id="search-wrap">
     <input id="search" type="text" placeholder="Search by name or number..." oninput="renderGrid()"/>
-    <div id="gen-filter" style="display:flex;gap:5px;margin-top:8px;flex-wrap:wrap">
-      <button class="gen-btn active" onclick="setGenFilter(0)">ALL</button>
-      <button class="gen-btn" onclick="setGenFilter(1)">GEN 1</button>
-      <button class="gen-btn" onclick="setGenFilter(2)">GEN 2</button>
-      <button class="gen-btn" onclick="setGenFilter(3)">GEN 3</button>
-      <button class="gen-btn" onclick="setGenFilter(4)">GEN 4</button>
-      <button class="gen-btn" onclick="setGenFilter(5)">GEN 5</button>
-      <button class="gen-btn" onclick="setGenFilter(6)">GEN 6</button>
-      <button class="gen-btn" onclick="setGenFilter(7)">GEN 7</button>
-      <button class="gen-btn" onclick="setGenFilter(8)">GEN 8</button>
-      <button class="gen-btn" onclick="setGenFilter(9)">GEN 9</button>
-    </div>
   </div>
   <div id="grid"></div>
 </div>
@@ -378,19 +373,7 @@
     <div id="binder-dex-search-wrap" style="padding-bottom:12px">
       <input id="binder-dex-search" type="text" placeholder="Search Pokémon name..."
         oninput="renderBinder()"
-        style="width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:3px;padding:8px 12px;color:var(--text);font-family:var(--mono);font-size:11px;outline:none;letter-spacing:0.08em;margin-bottom:8px"/>
-      <div style="display:flex;gap:5px;flex-wrap:wrap">
-        <button class="gen-btn active" onclick="setBinderGenFilter(0)">ALL</button>
-        <button class="gen-btn" onclick="setBinderGenFilter(1)">GEN 1</button>
-        <button class="gen-btn" onclick="setBinderGenFilter(2)">GEN 2</button>
-        <button class="gen-btn" onclick="setBinderGenFilter(3)">GEN 3</button>
-        <button class="gen-btn" onclick="setBinderGenFilter(4)">GEN 4</button>
-        <button class="gen-btn" onclick="setBinderGenFilter(5)">GEN 5</button>
-        <button class="gen-btn" onclick="setBinderGenFilter(6)">GEN 6</button>
-        <button class="gen-btn" onclick="setBinderGenFilter(7)">GEN 7</button>
-        <button class="gen-btn" onclick="setBinderGenFilter(8)">GEN 8</button>
-        <button class="gen-btn" onclick="setBinderGenFilter(9)">GEN 9</button>
-      </div>
+        style="width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:3px;padding:8px 12px;color:var(--text);font-family:var(--mono);font-size:11px;outline:none;letter-spacing:0.08em"/>
     </div>
     <table id="binder-table">
       <thead><tr id="binder-thead-row"><th>#</th><th>POKÉMON</th><th>OWNED</th><th>PAGE</th><th>SLOT</th></tr></thead>
@@ -411,6 +394,15 @@
     <div class="section-title">EXPORT</div>
     <button class="btn-primary" onclick="exportCSV()">EXPORT CSV</button>
     <button class="btn-secondary" onclick="exportJSON()">EXPORT JSON</button>
+  </div>
+
+  <div style="margin-top:28px">
+    <div class="section-title">IMPORT</div>
+    <div style="font-size:10px;color:var(--text2);letter-spacing:0.08em;margin-bottom:12px">Restore a previously exported JSON collection file.</div>
+    <label class="btn-secondary" style="cursor:pointer;display:inline-block">
+      IMPORT JSON
+      <input type="file" accept=".json" onchange="importJSON(event)" style="display:none"/>
+    </label>
   </div>
 
   <div style="margin-top:28px">
@@ -442,12 +434,50 @@
     </div>
     <div id="modal-body">
       <div id="modal-search-wrap" style="display:none;padding-bottom:12px">
-        <input id="modal-card-search" type="text" inputmode="numeric" placeholder="Filter by card number..."
-          oninput="filterPrintings()"
-          style="width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:3px;padding:8px 12px;color:var(--text);font-family:var(--mono);font-size:11px;outline:none;letter-spacing:0.08em"/>
+        <div style="display:flex;gap:6px;align-items:center">
+          <input id="modal-card-search" type="text" placeholder="Filter by card number e.g. 087 or 087/196..."
+            oninput="filterPrintings()"
+            style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:3px;padding:8px 12px;color:var(--text);font-family:var(--mono);font-size:11px;outline:none;letter-spacing:0.08em"/>
+          <button onclick="document.getElementById('modal-card-search').value+='/';filterPrintings()"
+            style="padding:8px 10px;background:var(--bg3);border:1px solid var(--border2);border-radius:3px;color:var(--gold);font-family:var(--mono);font-size:13px;cursor:pointer;flex-shrink:0">/</button>
+        </div>
       </div>
       <div id="modal-loading"></div>
       <div id="printings-grid"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Filter Panel -->
+<div id="filter-overlay" onclick="closeFilters(event)" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:300;align-items:flex-end;justify-content:center;backdrop-filter:blur(4px)">
+  <div id="filter-panel" style="background:var(--bg2);border:1px solid var(--border2);border-radius:8px 8px 0 0;width:100%;max-width:520px;padding:20px;padding-bottom:32px" onclick="event.stopPropagation()">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <div style="font-family:var(--sans);font-size:14px;font-weight:700;color:var(--gold);letter-spacing:0.2em">FILTERS</div>
+      <div style="display:flex;gap:10px;align-items:center">
+        <button onclick="resetFilters()" style="font-size:9px;letter-spacing:0.12em;font-family:var(--mono);background:none;border:1px solid var(--border2);color:var(--text2);padding:4px 10px;border-radius:2px;cursor:pointer">RESET</button>
+        <button onclick="closeFilters()" style="background:none;border:none;color:var(--text2);font-size:20px;cursor:pointer">✕</button>
+      </div>
+    </div>
+
+    <div style="font-size:9px;color:var(--text2);letter-spacing:0.15em;margin-bottom:8px">COLLECTION</div>
+    <div style="display:flex;gap:6px;margin-bottom:20px">
+      <button class="filter-opt-btn active" id="filt-owned-all" onclick="setOwnedFilter('all')">ALL</button>
+      <button class="filter-opt-btn" id="filt-owned-owned" onclick="setOwnedFilter('owned')">OWNED</button>
+      <button class="filter-opt-btn" id="filt-owned-unowned" onclick="setOwnedFilter('unowned')">UNOWNED</button>
+    </div>
+
+    <div style="font-size:9px;color:var(--text2);letter-spacing:0.15em;margin-bottom:8px">GENERATION</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px">
+      <button class="filter-opt-btn active" id="filt-gen-0" onclick="setGenFilterPanel(0)">ALL</button>
+      <button class="filter-opt-btn" id="filt-gen-1" onclick="setGenFilterPanel(1)">GEN 1</button>
+      <button class="filter-opt-btn" id="filt-gen-2" onclick="setGenFilterPanel(2)">GEN 2</button>
+      <button class="filter-opt-btn" id="filt-gen-3" onclick="setGenFilterPanel(3)">GEN 3</button>
+      <button class="filter-opt-btn" id="filt-gen-4" onclick="setGenFilterPanel(4)">GEN 4</button>
+      <button class="filter-opt-btn" id="filt-gen-5" onclick="setGenFilterPanel(5)">GEN 5</button>
+      <button class="filter-opt-btn" id="filt-gen-6" onclick="setGenFilterPanel(6)">GEN 6</button>
+      <button class="filter-opt-btn" id="filt-gen-7" onclick="setGenFilterPanel(7)">GEN 7</button>
+      <button class="filter-opt-btn" id="filt-gen-8" onclick="setGenFilterPanel(8)">GEN 8</button>
+      <button class="filter-opt-btn" id="filt-gen-9" onclick="setGenFilterPanel(9)">GEN 9</button>
     </div>
   </div>
 </div>
@@ -576,35 +606,13 @@ function switchView(v) {
 // ── Grid ─────────────────────────────────────────────────────────────────────
 // ── Generation ranges ─────────────────────────────────────────────────────────
 const GEN_RANGES = [
-  null,           // 0 = All
-  [1, 151],       // Gen 1
-  [152, 251],     // Gen 2
-  [252, 386],     // Gen 3
-  [387, 493],     // Gen 4
-  [494, 649],     // Gen 5
-  [650, 721],     // Gen 6
-  [722, 809],     // Gen 7
-  [810, 905],     // Gen 8
-  [906, 1025],    // Gen 9
+  null, [1,151], [152,251], [252,386], [387,493],
+  [494,649], [650,721], [722,809], [810,905], [906,1025]
 ];
 
 let activeGen = 0;
 let activeBinderGen = 0;
-
-function setGenFilter(gen) {
-  activeGen = gen;
-  document.querySelectorAll('#gen-filter .gen-btn').forEach((btn, i) => {
-    btn.classList.toggle('active', i === gen);
-  });
-  renderGrid();
-}
-
-function setBinderGenFilter(gen) {
-  activeBinderGen = gen;
-  const binderGenBtns = document.querySelectorAll('#binder-dex-search-wrap .gen-btn');
-  binderGenBtns.forEach((btn, i) => btn.classList.toggle('active', i === gen));
-  renderBinder();
-}
+let activeOwnedFilter = 'all'; // 'all' | 'owned' | 'unowned'
 
 function inGen(pokeId, gen) {
   if (!gen) return true;
@@ -612,11 +620,74 @@ function inGen(pokeId, gen) {
   return pokeId >= min && pokeId <= max;
 }
 
+function passesOwnedFilter(pokeId) {
+  if (activeOwnedFilter === 'all') return true;
+  if (activeOwnedFilter === 'owned') return isOwned(pokeId);
+  return !isOwned(pokeId);
+}
+
+// ── Filter panel ──────────────────────────────────────────────────────────────
+function openFilters() {
+  document.getElementById('filter-overlay').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+function closeFilters(e) {
+  if (e && e.target !== document.getElementById('filter-overlay')) return;
+  _closeFilters();
+}
+function _closeFilters() {
+  document.getElementById('filter-overlay').style.display = 'none';
+  document.body.style.overflow = '';
+}
+document.getElementById('filter-overlay').addEventListener('click', function(e) {
+  if (e.target === this) _closeFilters();
+});
+
+function setOwnedFilter(val) {
+  activeOwnedFilter = val;
+  ['all','owned','unowned'].forEach(v => {
+    document.getElementById('filt-owned-'+v).classList.toggle('active', v === val);
+  });
+  updateFilterBtn();
+  renderGrid();
+  renderSetsGrid();
+  renderBinder();
+}
+
+function setGenFilterPanel(gen) {
+  activeGen = gen;
+  activeBinderGen = gen;
+  for (let i = 0; i <= 9; i++) {
+    document.getElementById('filt-gen-'+i).classList.toggle('active', i === gen);
+  }
+  updateFilterBtn();
+  renderGrid();
+  renderBinder();
+}
+
+function resetFilters() {
+  activeGen = 0; activeBinderGen = 0; activeOwnedFilter = 'all';
+  setOwnedFilter('all');
+  setGenFilterPanel(0);
+}
+
+function updateFilterBtn() {
+  const isFiltered = activeGen !== 0 || activeOwnedFilter !== 'all';
+  const btn = document.getElementById('filter-btn');
+  btn.classList.toggle('filtered', isFiltered);
+  btn.textContent = isFiltered ? '⚡ FILTER •' : '⚡ FILTER';
+}
+
+// Legacy stubs kept for safety
+function setGenFilter(gen) { setGenFilterPanel(gen); }
+function setBinderGenFilter(gen) { setGenFilterPanel(gen); }
+
 function renderGrid() {
   const q = document.getElementById('search').value.toLowerCase();
   const filtered = pokemonList.filter(p =>
     (p.name.toLowerCase().includes(q) || String(p.id).includes(q)) &&
-    inGen(p.id, activeGen)
+    inGen(p.id, activeGen) &&
+    passesOwnedFilter(p.id)
   );
   const grid = document.getElementById('grid');
   if (filtered.length === 0) {
@@ -656,15 +727,15 @@ async function openModal(pokeId) {
   document.body.style.overflow = 'hidden';
 
   try {
-    const name = p.name.split(' ')[0];
+    const name = sanitiseFullNameForAPI(p.name);
     const headers = {};
     if (apiKey) headers['X-Api-Key'] = apiKey;
 
     // Check DB cache first (only trust if > 250, meaning pagination completed)
     let cards = null;
     const cached = await dbGetAll('cards');
-    const nameLower = name.toLowerCase();
-    const fromDB = cached.filter(c => c.name?.toLowerCase().startsWith(nameLower) && c._source === 'pokemon');
+    const nameLower = p.name.split(' ')[0].toLowerCase().replace(/'/g,'');
+    const fromDB = cached.filter(c => c.name?.toLowerCase().replace(/'/g,'').startsWith(nameLower) && c._source === 'pokemon');
     if (fromDB.length > 250) {
       cards = fromDB;
     } else {
@@ -735,15 +806,18 @@ function renderPrintings(pokeId, cards) {
   document.getElementById('printings-grid').innerHTML = unique.map(card => {
     const owned = ownedIds.has(card.id);
     const isDisp = card.id === dispId;
-    const img = card.images?.small;
+    const img = card.images?.small || card.image;
+    const safeName = (card.name||'').replace(/'/g,"\\'");
+    const safeSet = (card.set?.name||card.setName||'').replace(/'/g,"\\'");
     return `<div class="printing ${owned?'owned':''} ${isDisp?'is-display':''}" id="pr-${card.id}"
-      onclick="${owned ? `setDisplayCard('${pokeId}','${card.id}')` : `markOwned('${pokeId}','${card.id}','${(card.name||'').replace(/'/g,"\\'")}','${img||''}','${(card.set?.name||'').replace(/'/g,"\\'")}','${card.number||''}')`}"
-      title="${owned ? 'Click to set as display card' : 'Click to mark as owned'}">
+      onclick="${owned ? `setDisplayCard('${pokeId}','${card.id}')` : `markOwned('${pokeId}','${card.id}','${safeName}','${img||''}','${safeSet}','${card.number||''}')`}"
+      ondblclick="${!owned ? `event.stopPropagation();quickAddAndClose('${pokeId}','${card.id}','${safeName}','${img||''}','${safeSet}','${card.number||''}')` : ''}"
+      title="${owned ? 'Click to set as display · Double-tap to confirm' : 'Click to add · Double-tap to add and return to DEX'}">
       ${isDisp ? '<div class="display-badge">DISPLAY</div>' : ''}
       ${!owned ? '<div class="lock-icon">🔒</div>' : ''}
       ${img ? `<img src="${img}" alt="${card.name}" class="${owned?'':'locked-img'}" loading="lazy">` : `<div class="no-card-img">🃏</div>`}
       <div class="printing-name">${card.name}</div>
-      <div class="printing-set">${card.set?.name||''} #${card.number||''}</div>
+      <div class="printing-set">${card.set?.name||card.setName||''} #${card.number||''}</div>
       ${owned ? `<button class="remove-btn" onclick="event.stopPropagation();removeCardModal('${pokeId}','${card.id}')">REMOVE</button>` : ''}
     </div>`;
   }).join('');
@@ -839,7 +913,7 @@ async function quickAddLatest() {
   const p = currentPokemon;
   try {
     const headers = {}; if (apiKey) headers['X-Api-Key'] = apiKey;
-    const res = await fetch(`${TCG_BASE}/cards?q=name:"${encodeURIComponent(p.name.split(' ')[0])}"&pageSize=1&orderBy=-set.releaseDate`, { headers });
+    const res = await fetch(`${TCG_BASE}/cards?q=name:"${encodeURIComponent(sanitiseFullNameForAPI(p.name))}"&pageSize=1&orderBy=-set.releaseDate`, { headers });
     const data = await res.json();
     const card = data.data?.[0];
     if (card) {
@@ -907,7 +981,7 @@ async function searchAddCard() {
     try {
       const numPart = cardNum.includes('/') ? cardNum.split('/')[0] : cardNum;
       // Search by name AND number for a precise result
-      const res = await fetch(`${TCG_BASE}/cards?q=name:"${encodeURIComponent(q)}" number:${encodeURIComponent(numPart)}&pageSize=50&orderBy=-set.releaseDate`, { headers });
+      const res = await fetch(`${TCG_BASE}/cards?q=name:"${encodeURIComponent(sanitiseFullNameForAPI(q))}" number:${encodeURIComponent(numPart)}&pageSize=50&orderBy=-set.releaseDate`, { headers });
       const data = await res.json();
       const cards = data.data || [];
 
@@ -978,7 +1052,7 @@ async function showPrintingsPicker(pokeId) {
     let page = 1;
     let totalCount = null;
     while (true) {
-      const res = await fetch(`${TCG_BASE}/cards?q=name:"${encodeURIComponent(p.name.split(' ')[0])}"&pageSize=250&page=${page}&orderBy=set.releaseDate`, { headers });
+      const res = await fetch(`${TCG_BASE}/cards?q=name:"${encodeURIComponent(sanitiseFullNameForAPI(p.name))}"&pageSize=250&page=${page}&orderBy=set.releaseDate`, { headers });
       const data = await res.json();
       const batch = data.data || [];
       if (totalCount === null) totalCount = data.totalCount || 0;
@@ -1015,10 +1089,32 @@ function pickPrinting(pokeId, cardId, name, image, set, number) {
   });
 }
 
+// ── Name sanitisation for API queries ────────────────────────────────────────
+function sanitiseNameForAPI(name) {
+  // Take first word only (handles "Mr. Mime" -> "Mr.", but see below)
+  // For multi-word names that are one Pokemon, use full name
+  // Strip/escape apostrophes for Lucene query: Farfetch'd -> Farfetchd (wildcard search)
+  return name
+    .replace(/'/g, '')   // remove apostrophes: Farfetch'd -> Farfetchd
+    .replace(/♀/g, '-F') // Nidoran♀ -> Nidoran-F
+    .replace(/♂/g, '-M') // Nidoran♂ -> Nidoran-M
+    .split(' ')[0];      // first word only for compound names
+}
+
+// For full-name searches (Mr. Mime needs both words)
+function sanitiseFullNameForAPI(name) {
+  return name
+    .replace(/'/g, '')
+    .replace(/♀/g, '-F')
+    .replace(/♂/g, '-M');
+}
+
 function findPokeIdFromCardName(cardName) {
-  // Try to match card name to a pokemon in our list
-  const name = cardName.split(' ')[0].toLowerCase();
-  const match = pokemonList.find(p => p.name.toLowerCase() === name || p.name.toLowerCase().startsWith(name));
+  const cleanInput = cardName.toLowerCase().replace(/'/g, '').split(' ')[0];
+  const match = pokemonList.find(p => {
+    const cleanPoke = p.name.toLowerCase().replace(/'/g, '').split(' ')[0];
+    return cleanPoke === cleanInput || cleanPoke.startsWith(cleanInput);
+  });
   return match ? match.id : null;
 }
 
@@ -1075,6 +1171,15 @@ function renderSetsGrid() {
   let sets = allSets.filter(s => {
     if (!showHidden && setsMeta.hidden.includes(s.id)) return false;
     if (q && !s.name.toLowerCase().includes(q) && !s.series?.toLowerCase().includes(q)) return false;
+    // Owned filter — based on cached cards
+    if (activeOwnedFilter !== 'all') {
+      const cachedCards = setCardsCache[s.id];
+      if (cachedCards) {
+        const hasOwned = cachedCards.some(c => isCardOwnedInSet(c.id));
+        if (activeOwnedFilter === 'owned' && !hasOwned) return false;
+        if (activeOwnedFilter === 'unowned' && hasOwned) return false;
+      }
+    }
     return true;
   });
   const pinned = sets.filter(s => setsMeta.pinned.includes(s.id));
@@ -1309,7 +1414,8 @@ function renderBinder() {
     const ownedPokemon = pokemonList.filter(p => isOwned(p.id));
     const filtered = ownedPokemon.filter(p =>
       (!q || p.name.toLowerCase().includes(q)) &&
-      inGen(p.id, activeBinderGen)
+      inGen(p.id, activeBinderGen) &&
+      passesOwnedFilter(p.id)
     );
     if (ownedPokemon.length === 0) { tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text3)">No cards owned yet</td></tr>'; return; }
     if (filtered.length === 0) { tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text3)">No Pokémon found</td></tr>'; return; }
@@ -1385,6 +1491,48 @@ function resetCollection() {
 }
 
 // ── Export ───────────────────────────────────────────────────────────────────
+// ── Quick add and close (double-tap) ─────────────────────────────────────────
+function quickAddAndClose(pokeId, cardId, name, image, setName, number) {
+  addCard(parseInt(pokeId), { id: cardId, name, image, set: setName, number });
+  showToast(name + ' added!', 'success');
+  renderGrid();
+  _closeModal();
+}
+
+// ── Import ────────────────────────────────────────────────────────────────────
+function importJSON(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (!Array.isArray(data)) throw new Error('Invalid format');
+      let imported = 0;
+      data.forEach(entry => {
+        if (!entry.id || !Array.isArray(entry.owned)) return;
+        const pokeId = String(entry.id);
+        if (!collection[pokeId]) collection[pokeId] = { owned: [], display: null };
+        entry.owned.forEach(card => {
+          if (!collection[pokeId].owned.find(c => c.id === card.id)) {
+            collection[pokeId].owned.push(card);
+            imported++;
+          }
+        });
+        if (entry.display) collection[pokeId].display = entry.display;
+      });
+      saveData();
+      renderGrid();
+      updateProgress();
+      showToast(`Imported ${imported} card${imported !== 1 ? 's' : ''}!`, 'success');
+    } catch {
+      showToast('Invalid file — use an exported JSON', 'error');
+    }
+    event.target.value = ''; // reset so same file can be re-imported
+  };
+  reader.readAsText(file);
+}
+
 function exportCSV() {
   const rows = [['Pokedex #','Name','Owned','Printings Owned','Display Card ID']];
   pokemonList.forEach(p => {
@@ -1498,5 +1646,6 @@ async function init() {
 init();
 
 </script>
+</div><!-- /app-root -->
 </body>
 </html>
