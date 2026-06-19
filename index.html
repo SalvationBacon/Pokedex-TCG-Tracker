@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover"/>
 <title>POKÉDEX TCG — Collection Tracker</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet"/>
@@ -32,9 +32,9 @@
     --sans: 'Rajdhani', sans-serif;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body { height: 100%; overflow: hidden; }
-  body { background: var(--bg); color: var(--text); font-family: var(--mono); overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch; position: fixed; width: 100%; height: 100%; }
-  #app-root { height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  html, body { height: 100%; overflow: hidden; background: var(--bg); }
+  body { color: var(--text); font-family: var(--mono); overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch; position: fixed; width: 100%; height: 100%; }
+  #app-root { height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
   ::-webkit-scrollbar { width: 4px; }
   ::-webkit-scrollbar-track { background: var(--bg); }
   ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
