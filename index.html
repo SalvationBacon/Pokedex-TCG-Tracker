@@ -1581,7 +1581,23 @@ function renderBinderPage() {
 
   if (binderMode === 'dex') {
     const q = (document.getElementById('binder-dex-search')?.value || '').toLowerCase();
-    gridEl.innerHTML = grid.map((slot, i) => {
+
+    // If searching, jump to the first page containing a match
+    if (q) {
+      const matchSlot = binderAllSlots.find(s => s.pokemon && s.pokemon.name.toLowerCase().includes(q));
+      if (matchSlot && matchSlot.page !== binderCurrentPage) {
+        binderCurrentPage = matchSlot.page;
+        document.getElementById('binder-page-label').textContent = `PAGE ${binderCurrentPage} OF ${totalPages}`;
+        document.getElementById('binder-prev').style.opacity = binderCurrentPage <= 1 ? '0.3' : '1';
+        document.getElementById('binder-next').style.opacity = binderCurrentPage >= totalPages ? '0.3' : '1';
+        // Rebuild page slots for new page
+        const newPageSlots = binderAllSlots.filter(s => s.page === binderCurrentPage);
+        grid.fill(null);
+        newPageSlots.forEach(s => { grid[s.slot - 1] = s; });
+      }
+    }
+
+    gridEl.innerHTML = grid.map((slot) => {
       if (!slot || !slot.pokemon) {
         return `<div class="binder-slot empty"><div class="binder-slot-num">—</div></div>`;
       }
@@ -1590,8 +1606,8 @@ function renderBinderPage() {
       const owned = slot.owned;
       const dispCard = owned ? (getOwned(p.id).find(c => c.id === getDisplay(p.id)) || getOwned(p.id)[0]) : null;
       const imgSrc = dispCard?.image || p.sprite;
-      const highlight = q && matchesSearch;
-      return `<div class="binder-slot ${owned?'filled':'empty'}" style="${highlight?'border-color:var(--gold);opacity:1':''}">
+      const dimmed = q && !matchesSearch;
+      return `<div class="binder-slot ${owned?'filled':'empty'}" style="${matchesSearch && q ? 'border-color:var(--gold);opacity:1' : dimmed ? 'opacity:0.15' : ''}">
         ${owned ? '<div class="binder-slot-owned-dot"></div>' : ''}
         ${imgSrc ? `<img src="${imgSrc}" alt="${p.name}" loading="lazy" style="${owned?'':'filter:grayscale(1) brightness(0.3)'}" onerror="this.style.display='none'">` : ''}
         <div class="binder-slot-name">${p.name}</div>
