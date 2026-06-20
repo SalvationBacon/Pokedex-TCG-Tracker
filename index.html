@@ -665,6 +665,7 @@ let apiKey = '';
 let pokemonList = []; // [{id, name, sprite}]
 let currentPokemon = null;
 let currentModalCards = [];
+let modalRequestToken = null;
 
 let currentView = 'dex';
 
@@ -912,6 +913,9 @@ async function openModal(pokeId) {
   const p = pokemonList.find(x => x.id === pokeId);
   if (!p) return;
   currentPokemon = p;
+  // Token to detect if a newer modal open superseded this one
+  const requestToken = Symbol('modal');
+  modalRequestToken = requestToken;
 
   document.getElementById('modal-sub').textContent = '#' + String(p.id).padStart(4,'0');
   document.getElementById('modal-title').textContent = p.name.toUpperCase();
@@ -931,21 +935,30 @@ async function openModal(pokeId) {
     if (db) {
       try {
         const searchBase = getBaseName(name);
-        cards = await new Promise((resolve) => {
-          const tx = db.transaction('cards', 'readonly');
-          const index = tx.objectStore('cards').index('byBaseName');
-          const results = [];
-          const range = IDBKeyRange.bound(searchBase, searchBase + '\uffff');
-          index.openCursor(range).onsuccess = e => {
-            const cursor = e.target.result;
-            if (cursor) {
-              if (cursor.value._source === 'pokemon') results.push(cursor.value);
-              cursor.continue();
-            } else {
-              resolve(results.length > 0 ? results : null);
-            }
-          };
-        });
+        cards = await Promise.race([
+          new Promise((resolve) => {
+            try {
+              const tx = db.transaction('cards', 'readonly');
+              const index = tx.objectStore('cards').index('byBaseName');
+              const results = [];
+              const range = IDBKeyRange.bound(searchBase, searchBase + '\uffff');
+              const req = index.openCursor(range);
+              req.onsuccess = e => {
+                const cursor = e.target.result;
+                if (cursor) {
+                  if (cursor.value._source === 'pokemon') results.push(cursor.value);
+                  cursor.continue();
+                } else {
+                  resolve(results.length > 0 ? results : null);
+                }
+              };
+              req.onerror = () => resolve(null);
+              tx.onerror = () => resolve(null);
+              tx.onabort = () => resolve(null);
+            } catch { resolve(null); }
+          }),
+          new Promise(resolve => setTimeout(() => resolve(null), 3000))
+        ]);
       } catch { cards = null; }
     }
 
@@ -955,8 +968,15 @@ async function openModal(pokeId) {
       let page = 1;
       let totalCount = null;
       while (true) {
-        const res = await fetch(`${TCG_BASE}/cards?q=name:"${encodeURIComponent(name)}"&pageSize=250&page=${page}&orderBy=set.releaseDate`, { headers });
-        const data = await res.json();
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15000);
+        let data;
+        try {
+          const res = await fetch(`${TCG_BASE}/cards?q=name:"${encodeURIComponent(name)}"&pageSize=250&page=${page}&orderBy=set.releaseDate`, { headers, signal: controller.signal });
+          data = await res.json();
+        } finally {
+          clearTimeout(timeout);
+        }
         const batch = data.data || [];
         if (totalCount === null) totalCount = data.totalCount || 0;
         cards = cards.concat(batch);
@@ -973,12 +993,15 @@ async function openModal(pokeId) {
       }));
       dbPutBulk('cards', lean);
     }
+    // If a newer modal was opened while we were loading, abandon this render
+    if (modalRequestToken !== requestToken) return;
     document.getElementById('modal-loading').innerHTML = '';
     document.getElementById('modal-search-wrap').style.display = 'block';
     document.getElementById('modal-card-search').value = '';
     currentModalCards = cards;
     renderPrintings(p.id, cards);
   } catch {
+    if (modalRequestToken !== requestToken) return;
     document.getElementById('modal-loading').innerHTML = '<div style="text-align:center;padding:48px;color:var(--red);font-size:11px;letter-spacing:.12em">Failed to load. Check API key or connection.</div>';
   }
 }
