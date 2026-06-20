@@ -506,8 +506,6 @@
     <div class="section-title">APP</div>
     <button class="btn-secondary" onclick="window.location.reload(true)" style="margin-bottom:10px">CHECK FOR UPDATES</button>
     <div style="font-size:9px;color:var(--text3);margin-bottom:16px;letter-spacing:0.08em">Reloads the app to pick up any new updates pushed to GitHub.</div>
-    <button class="btn-secondary" id="enrich-btn" onclick="enrichRaritiesManual()">FETCH RARITY DATA</button>
-    <div id="enrich-status" style="font-size:9px;color:var(--text3);margin-top:8px;letter-spacing:0.08em">Fetches rarity info for all owned cards so Sort by Rarity works. Requires an API key.</div>
   </div>
 
   <div style="margin-top:28px">
@@ -894,17 +892,16 @@ async function openModal(pokeId) {
     const headers = {};
     if (apiKey) headers['X-Api-Key'] = apiKey;
 
-    // Check DB cache using name index
+    // Check DB cache using baseName index — catches "Mega Scizor", "Dark Charizard" etc.
     let cards = null;
     if (db) {
       try {
-        const nameLower = name.toLowerCase().replace(/'/g, '');
+        const searchBase = getBaseName(name);
         cards = await new Promise((resolve) => {
           const tx = db.transaction('cards', 'readonly');
-          const index = tx.objectStore('cards').index('byName');
+          const index = tx.objectStore('cards').index('byBaseName');
           const results = [];
-          // Use cursor on name index with range starting with our name
-          const range = IDBKeyRange.bound(nameLower, nameLower + '\uffff');
+          const range = IDBKeyRange.bound(searchBase, searchBase + '\uffff');
           index.openCursor(range).onsuccess = e => {
             const cursor = e.target.result;
             if (cursor) {
@@ -1973,7 +1970,7 @@ function goToBinderSlot() {
 
 // ── IndexedDB lazy cache ──────────────────────────────────────────────────────
 const DB_NAME = 'sgc_tcg_db';
-const DB_VERSION = 3; // bumped to add indexes for faster queries
+const DB_VERSION = 4; // added baseName index for variant card search
 let db = null;
 
 async function openDB() {
@@ -1989,6 +1986,7 @@ async function openDB() {
       const cards = d.createObjectStore('cards', { keyPath: 'id' });
       cards.createIndex('bySetId', 'setId', { unique: false });
       cards.createIndex('byName', 'nameLower', { unique: false });
+      cards.createIndex('byBaseName', 'baseName', { unique: false });
       if (!d.objectStoreNames.contains('sets')) d.createObjectStore('sets', { keyPath: 'id' });
     };
     req.onsuccess = e => { db = e.target.result; resolve(); };
@@ -2007,15 +2005,41 @@ function dbGetAll(store) {
   });
 }
 
+// Prefixes that appear before base Pokemon name in card names
+const CARD_NAME_PREFIXES = [
+  'mega ','dark ','shadow ','rocket\'s ','misty\'s ','brock\'s ','lt. surge\'s ',
+  'erika\'s ','koga\'s ','blaine\'s ','giovanni\'s ','sabrina\'s ','team magma\'s ',
+  'team aqua\'s ','team galactic\'s ','team plasma\'s ','team flare\'s ',
+  'prism star ','radiant ','hisuian ','galarian ','alolan ','paldean ',
+  'ancient ','future ','ex ','gx ','v ','vmax ','vstar ',
+  'dusk mane ','dawn wings ','ultra ','origin forme ','altered forme ',
+];
+
+function getBaseName(cardName) {
+  if (!cardName) return '';
+  let name = cardName.toLowerCase();
+  // Strip trailing qualifiers: "charizard ex" -> "charizard", "pikachu v" -> "pikachu"
+  name = name.replace(/\s+(ex|gx|v|vmax|vstar|◇|prism star)$/i, '');
+  // Strip known prefixes
+  for (const prefix of CARD_NAME_PREFIXES) {
+    if (name.startsWith(prefix)) { name = name.slice(prefix.length); break; }
+  }
+  // Also strip possessives like "lt. surge's raichu" -> already handled above
+  return name.trim();
+}
+
 function dbPutBulk(store, items) {
   if (!db || !items.length) return;
   try {
     const tx = db.transaction(store, 'readwrite');
     const os = tx.objectStore(store);
     items.forEach(item => {
-      // Add nameLower for the name index on cards store
       if (store === 'cards' && item.name) {
-        os.put({ ...item, nameLower: item.name.toLowerCase() });
+        os.put({
+          ...item,
+          nameLower: item.name.toLowerCase(),
+          baseName: getBaseName(item.name)
+        });
       } else {
         os.put(item);
       }
@@ -2131,53 +2155,6 @@ async function loadPokemonList() {
 }
 
 // ── Init ─────────────────────────────────────────────────────────────────────
-async function enrichRaritiesManual() {
-  if (!apiKey) { showToast('API key required — add one in Settings', 'error'); return; }
-  const btn = document.getElementById('enrich-btn');
-  const status = document.getElementById('enrich-status');
-  btn.disabled = true;
-  btn.textContent = 'FETCHING...';
-
-  const missing = [];
-  Object.entries(collection).forEach(([pokeId, data]) => {
-    (data.owned || []).forEach(card => {
-      if (!card.rarity && card.id) missing.push({ pokeId, card });
-    });
-  });
-
-  if (missing.length === 0) {
-    status.textContent = 'All cards already have rarity data!';
-    status.style.color = 'var(--green)';
-    btn.disabled = false; btn.textContent = 'FETCH RARITY DATA';
-    return;
-  }
-
-  const headers = { 'X-Api-Key': apiKey };
-  let enriched = 0;
-
-  for (let i = 0; i < missing.length; i++) {
-    const { card } = missing[i];
-    status.textContent = `Fetching ${i + 1} / ${missing.length}...`;
-    try {
-      const res = await fetch(`${TCG_BASE}/cards/${card.id}`, { headers });
-      if (!res.ok) { status.textContent = `Stopped at ${i + 1} — rate limited. Try again shortly.`; break; }
-      const data = await res.json();
-      const rarity = data.data?.rarity || '';
-      if (rarity) { card.rarity = rarity; card.addedAt = card.addedAt || Date.now(); enriched++; }
-      await new Promise(r => setTimeout(r, 200));
-    } catch { break; }
-  }
-
-  saveData();
-  renderGrid();
-  status.textContent = `Done! Updated ${enriched} card${enriched !== 1 ? 's' : ''}.`;
-  status.style.color = 'var(--green)';
-  btn.disabled = false;
-  btn.textContent = 'FETCH RARITY DATA';
-}
-
-async function enrichMissingRarities() {} // kept as stub
-
 async function init() {
   loadData();
   loadSetsMeta();
