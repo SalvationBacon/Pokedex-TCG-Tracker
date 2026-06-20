@@ -1337,12 +1337,20 @@ function sanitiseNameForAPI(name) {
 
 // For full-name searches (Mr. Mime needs both words)
 function sanitiseFullNameForAPI(name) {
-  // First normalise to strip form suffixes (Male, Standard, Galar etc.)
-  // Convert display name back to a slug-like form for normalisation
-  const slug = name.toLowerCase().replace(/ /g, '-').replace(/♀/g, '-f').replace(/♂/g, '-m').replace(/é/g, 'e').replace(/'/g, '');
-  const normalised = normalisePokemonName(slug);
-  // Then strip any remaining special chars for API query
-  return normalised
+  // Strip known form suffixes from display names (space-separated)
+  const spaceSuffixes = [' male',' female',' standard',' zen',' altered',' origin',
+    ' land',' sky',' incarnate',' therian',' black',' white',' normal',
+    ' attack',' defense',' speed',' heat',' wash',' frost',' fan',' mow',
+    ' plant',' sandy',' trash',' baile',' midday',' midnight',' dusk',
+    ' solo',' school',' red striped',' blue striped',' galar'];
+  let cleaned = name;
+  for (const s of spaceSuffixes) {
+    if (cleaned.toLowerCase().endsWith(s)) {
+      cleaned = cleaned.slice(0, cleaned.length - s.length);
+      break;
+    }
+  }
+  return cleaned
     .replace(/♀/g, '-F')
     .replace(/♂/g, '-M')
     .replace(/é/g, 'e');
@@ -2147,6 +2155,8 @@ const HYPHEN_NAMES = new Set([
 const APOSTROPHE_NAMES = {
   'farfetchd': "Farfetch'd",
   'sirfetchd': "Sirfetch'd",
+  'oinkologne-male': 'Oinkologne',
+  'oinkologne-female': 'Oinkologne',
 };
 
 function normalisePokemonName(rawName) {
