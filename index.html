@@ -2167,13 +2167,8 @@ const FORM_SUFFIXES = [
 // Names where hyphens are part of the actual name
 const HYPHEN_NAMES = new Set([
   'jangmo-o','hakamo-o','kommo-o','ho-oh','porygon-z',
-  // Paradox Pokémon with hyphens
+  // Treasures of Ruin — these genuinely have hyphens
   'chi-yu','wo-chien','chien-pao','ting-lu',
-  'great-tusk','scream-tail','brute-bonnet','flutter-mane',
-  'slither-wing','sandy-shocks','iron-treads','iron-bundle',
-  'iron-hands','iron-jugulis','iron-moth','iron-thorns',
-  'roaring-moon','iron-valiant','walking-wake','iron-leaves',
-  'gouging-fire','raging-bolt','iron-boulder','iron-crown',
 ]);
 
 // Apostrophe restorations
@@ -2230,7 +2225,8 @@ function normalisePokemonName(rawName) {
   }
 
   // Default — capitalise first letter, replace remaining hyphens with spaces
-  return rawName.charAt(0).toUpperCase() + rawName.slice(1).replace(/-/g, ' ');
+  // Default — title-case each word, hyphens become spaces
+  return rawName.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 }
 
 const POKEMON_NAME_VERSION = '7'; // bump this when name fixes are pushed
