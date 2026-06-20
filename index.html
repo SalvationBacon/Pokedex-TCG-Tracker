@@ -1346,12 +1346,10 @@ function sanitiseFullNameForAPI(name) {
   for (const s of spaceSuffixes) {
     if (cleaned.toLowerCase().endsWith(s)) { cleaned = cleaned.slice(0, cleaned.length - s.length); break; }
   }
-  // Handle Nidoran → search as just Nidoran (API finds both forms)
   return cleaned
     .replace(/♀/g, '-F')
     .replace(/♂/g, '-M')
-    .replace(/é/g, 'e')
-    .replace(/'/g, '');
+    .replace(/é/g, 'e');
 }
 
 function findPokeIdFromCardName(cardName) {
@@ -1663,7 +1661,7 @@ async function selectBinderSet(setId) {
   document.getElementById('binder-selected-set-label').textContent = set.name.toUpperCase();
   document.getElementById('binder-selected-set-label').style.display = 'block';
   if (!setCardsCache[setId]) {
-    document.getElementById('binder-tbody').innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)"><span class="spinner"></span> Loading...</td></tr>';
+    document.getElementById('binder-page-grid').innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:24px;color:var(--text3)"><span class="spinner"></span> Loading...</div>';
     try {
       const headers = {}; if (apiKey) headers['X-Api-Key'] = apiKey;
       let cards = [], page = 1, totalCount = Infinity;
@@ -1678,7 +1676,7 @@ async function selectBinderSet(setId) {
       }
       setCardsCache[setId] = cards;
     } catch {
-      document.getElementById('binder-tbody').innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--red)">Failed to load</td></tr>';
+      document.getElementById('binder-page-grid').innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:24px;color:var(--red)">Failed to load</div>';
       return;
     }
   }
@@ -1937,15 +1935,22 @@ function importJSON(event) {
 }
 
 function exportCSV() {
-  const rows = [['Pokedex #','Name','Owned','Printings Owned','Display Card ID']];
-  pokemonList.forEach(p => {
-    rows.push([p.id, p.name, isOwned(p.id)?'Yes':'No', getOwned(p.id).map(c=>c.name).join('; '), getDisplay(p.id)||'']);
+  const rows = [['Pokedex #','Name','Printings Owned','Display Card ID']];
+  pokemonList.filter(p => isOwned(p.id)).forEach(p => {
+    rows.push([p.id, p.name, getOwned(p.id).map(c=>c.name).join('; '), getDisplay(p.id)||'']);
   });
   const csv = rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n');
   dl(new Blob([csv],{type:'text/csv'}), 'pokedex_collection.csv');
 }
 function exportJSON() {
-  const out = pokemonList.map(p => ({ id:p.id, name:p.name, owned:getOwned(p.id), display:getDisplay(p.id) }));
+  // Only export Pokémon that have owned cards, plus the _misc bucket
+  const out = pokemonList
+    .filter(p => isOwned(p.id))
+    .map(p => ({ id:p.id, name:p.name, owned:getOwned(p.id), display:getDisplay(p.id) }));
+  // Include trainer/energy misc cards if any
+  if (collection['_misc']?.owned?.length) {
+    out.push({ id:'_misc', name:'Trainer/Energy', owned: collection['_misc'].owned, display: null });
+  }
   dl(new Blob([JSON.stringify(out,null,2)],{type:'application/json'}), 'pokedex_collection.json');
 }
 function dl(blob, name) {
@@ -2159,6 +2164,16 @@ const APOSTROPHE_NAMES = {
   'frillish-female': 'Frillish',
   'jellicent-male': 'Jellicent',
   'jellicent-female': 'Jellicent',
+  'meowstic-male': 'Meowstic',
+  'meowstic-female': 'Meowstic',
+  'indeedee-male': 'Indeedee',
+  'indeedee-female': 'Indeedee',
+  'basculegion-male': 'Basculegion',
+  'basculegion-female': 'Basculegion',
+  'unfezant-male': 'Unfezant',
+  'unfezant-female': 'Unfezant',
+  'pyroar-male': 'Pyroar',
+  'pyroar-female': 'Pyroar',
 };
 
 function normalisePokemonName(rawName) {
