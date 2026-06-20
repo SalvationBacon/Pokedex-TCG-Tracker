@@ -1882,6 +1882,8 @@ function quickAddAndClose(pokeId, cardId, name, image, setName, number) {
   showToast(name + ' added!', 'success', parseInt(pokeId));
   renderGrid();
   _closeModal();
+  // Refresh binder immediately if open
+  if (currentView === 'binder' && binderMode === 'dex') renderBinderPage();
 }
 
 // ── Import ────────────────────────────────────────────────────────────────────
