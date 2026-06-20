@@ -2007,7 +2007,7 @@ function goToBinderSlot() {
 
 // ── IndexedDB lazy cache ──────────────────────────────────────────────────────
 const DB_NAME = 'sgc_tcg_db';
-const DB_VERSION = 4; // added baseName index for variant card search
+const DB_VERSION = 5; // force rebuild pokemon store with corrected names
 let db = null;
 
 async function openDB() {
