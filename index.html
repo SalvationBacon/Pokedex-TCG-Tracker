@@ -1027,10 +1027,15 @@ document.getElementById('modal-close').addEventListener('click', _closeModal);
 
 function openAddCardForPokemon(pokeId, name) {
   openAddCard();
-  // Pre-fill the search and trigger results
   setTimeout(() => {
-    const input = document.getElementById('add-search');
-    input.value = name;
+    // Clear any previous search state first
+    document.getElementById('add-search').value = '';
+    document.getElementById('add-card-number').value = '';
+    document.getElementById('add-results').innerHTML = '<div id="add-status">Loading...</div>';
+    document.getElementById('add-printings-wrap').style.display = 'none';
+    document.getElementById('add-results').style.display = 'block';
+    // Pre-fill and search
+    document.getElementById('add-search').value = name;
     searchAddCard();
   }, 50);
 }
@@ -1199,8 +1204,8 @@ function sanitiseNameForAPI(name) {
 
 // For full-name searches (Mr. Mime needs both words)
 function sanitiseFullNameForAPI(name) {
+  // TCG API handles apostrophes fine inside quotes — only strip special symbols
   return name
-    .replace(/'/g, '')
     .replace(/♀/g, '-F')
     .replace(/♂/g, '-M')
     .replace(/é/g, 'e'); // Flabébé -> Flabebe
