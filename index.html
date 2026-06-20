@@ -1955,7 +1955,7 @@ function goToBinderSlot() {
 
 // ── IndexedDB lazy cache ──────────────────────────────────────────────────────
 const DB_NAME = 'sgc_tcg_db';
-const DB_VERSION = 1;
+const DB_VERSION = 2; // bumped to force pokemon name refresh
 let db = null;
 
 async function openDB() {
@@ -1963,12 +1963,14 @@ async function openDB() {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = e => {
       const d = e.target.result;
-      if (!d.objectStoreNames.contains('pokemon')) d.createObjectStore('pokemon', { keyPath: 'id' });
+      // Clear and recreate pokemon store to fix bad cached names
+      if (d.objectStoreNames.contains('pokemon')) d.deleteObjectStore('pokemon');
+      d.createObjectStore('pokemon', { keyPath: 'id' });
       if (!d.objectStoreNames.contains('cards')) d.createObjectStore('cards', { keyPath: 'id' });
       if (!d.objectStoreNames.contains('sets')) d.createObjectStore('sets', { keyPath: 'id' });
     };
     req.onsuccess = e => { db = e.target.result; resolve(); };
-    req.onerror = () => resolve(); // silently fail — app works without DB
+    req.onerror = () => resolve();
   });
 }
 
@@ -2006,15 +2008,25 @@ const FORM_SUFFIXES = [
   'normal','attack','defense','speed','ordinary','resolute',
   'aria','pirouette','incarnate','therian','black','white',
   'baile','pom-pom','pau','sensu','midday','midnight','dusk',
-  'solo','school','shield','blade','red-meteor','blue-meteor',
-  'green-meteor','indigo-meteor','violet-meteor','yellow-meteor',
-  'orange-meteor','red','blue','green','yellow',
+  'solo','school','shield','blade',
+  'red-meteor','blue-meteor','green-meteor','indigo-meteor',
+  'violet-meteor','yellow-meteor','orange-meteor','red','blue',
+  'green','yellow','orange','white-striped',
   'dusk-mane','dawn-wings','ultra','50','10','complete',
   'single-strike','rapid-strike','ice-rider','shadow-rider',
-  'male','female','east','west','average','small',
-  'disguised','busted','hangry','gorging','gulping','noice',
-  'confined','unbound','meteor','core','low-key','amped',
+  'male','female','east','west',
+  'average','small','large','super',  // Pumpkaboo
+  'disguised','busted','hangry',
+  'gorging','gulping','noice','ice',  // Eiscue
+  'confined','unbound',
+  'meteor','core','low-key','amped',
   'crowned','eternamax','full-belly','zero',
+  'family-of-three','family-of-four', // Maushold
+  'curly','droopy','stretchy',        // Tatsugiri
+  'green-plumage','blue-plumage','yellow-plumage','white-plumage', // Squawkabilly
+  'combat-breed','blaze-breed','aqua-breed', // Quaquaval etc
+  'hero','teal','wellspring','hearthflame','cornerstone', // Ogerpon
+  'glide','aquatic','land',
 ];
 
 // Names where hyphens are part of the actual name
