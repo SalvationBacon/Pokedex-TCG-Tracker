@@ -1337,7 +1337,6 @@ function sanitiseNameForAPI(name) {
 
 // For full-name searches (Mr. Mime needs both words)
 function sanitiseFullNameForAPI(name) {
-  // Strip known form suffixes from display names (space-separated)
   const spaceSuffixes = [' male',' female',' standard',' zen',' altered',' origin',
     ' land',' sky',' incarnate',' therian',' black',' white',' normal',
     ' attack',' defense',' speed',' heat',' wash',' frost',' fan',' mow',
@@ -1345,15 +1344,14 @@ function sanitiseFullNameForAPI(name) {
     ' solo',' school',' red striped',' blue striped',' galar'];
   let cleaned = name;
   for (const s of spaceSuffixes) {
-    if (cleaned.toLowerCase().endsWith(s)) {
-      cleaned = cleaned.slice(0, cleaned.length - s.length);
-      break;
-    }
+    if (cleaned.toLowerCase().endsWith(s)) { cleaned = cleaned.slice(0, cleaned.length - s.length); break; }
   }
+  // Handle Nidoran → search as just Nidoran (API finds both forms)
   return cleaned
     .replace(/♀/g, '-F')
     .replace(/♂/g, '-M')
-    .replace(/é/g, 'e');
+    .replace(/é/g, 'e')
+    .replace(/'/g, '');
 }
 
 function findPokeIdFromCardName(cardName) {
@@ -2157,6 +2155,10 @@ const APOSTROPHE_NAMES = {
   'sirfetchd': "Sirfetch'd",
   'oinkologne-male': 'Oinkologne',
   'oinkologne-female': 'Oinkologne',
+  'frillish-male': 'Frillish',
+  'frillish-female': 'Frillish',
+  'jellicent-male': 'Jellicent',
+  'jellicent-female': 'Jellicent',
 };
 
 function normalisePokemonName(rawName) {
@@ -2166,8 +2168,8 @@ function normalisePokemonName(rawName) {
   if (APOSTROPHE_NAMES[lower]) return APOSTROPHE_NAMES[lower];
 
   // Nidoran special cases
-  if (lower === 'nidoran-f') return 'Nidoran♀';
-  if (lower === 'nidoran-m') return 'Nidoran♂';
+  if (lower === 'nidoran-f') return 'Nidoran';
+  if (lower === 'nidoran-m') return 'Nidoran';
 
   // Flabébé
   if (lower === 'flabebe') return 'Flabébé';
