@@ -359,7 +359,7 @@
     <div style="display:flex;gap:8px;align-items:center">
       <div style="flex:1;position:relative">
         <input id="search" type="text" placeholder="Search by name or number..." oninput="renderGrid();toggleClear('search','search-clear-btn')" style="width:100%;padding-right:28px"/>
-        <button id="search-clear-btn" class="search-clear" onclick="clearSearch('search','search-clear-btn');renderGrid()">✕</button>
+        <button id="search-clear-btn" class="search-clear" onmousedown="event.preventDefault()" onclick="clearSearch('search','search-clear-btn');renderGrid()">✕</button>
       </div>
       <select id="dex-sort" onchange="renderGrid()" style="background:var(--bg3);border:1px solid var(--border2);border-radius:3px;padding:8px 10px;color:var(--text);font-family:var(--mono);font-size:10px;outline:none;cursor:pointer;flex-shrink:0">
         <option value="dex">POKÉDEX #</option>
@@ -376,7 +376,7 @@
   <div id="sets-search-wrap">
     <div style="flex:1;position:relative">
       <input id="sets-search" type="text" placeholder="Search sets..." oninput="renderSetsGrid();toggleClear('sets-search','sets-search-clear')" style="width:100%;padding-right:28px"/>
-      <button id="sets-search-clear" class="search-clear" onclick="clearSearch('sets-search','sets-search-clear');renderSetsGrid()">✕</button>
+      <button id="sets-search-clear" class="search-clear" onmousedown="event.preventDefault()" onclick="clearSearch('sets-search','sets-search-clear');renderSetsGrid()">✕</button>
     </div>
     <button id="sets-show-hidden-btn" onclick="toggleShowHidden()">SHOW HIDDEN</button>
   </div>
@@ -445,7 +445,7 @@
           onfocus="renderBinderSearchDropdown()"
           onblur="setTimeout(()=>document.getElementById('binder-search-dropdown').style.display='none',200)"
           style="width:100%;padding-right:28px;background:var(--bg3);border:1px solid var(--border2);border-radius:3px;padding:8px 28px 8px 12px;color:var(--text);font-family:var(--mono);font-size:11px;outline:none;letter-spacing:0.08em"/>
-        <button id="binder-search-clear" class="search-clear" onclick="clearSearch('binder-dex-search','binder-search-clear');binderHighlightId=null;renderBinderPage()">✕</button>
+        <button id="binder-search-clear" class="search-clear" onmousedown="event.preventDefault()" onclick="clearSearch('binder-dex-search','binder-search-clear');binderHighlightId=null;renderBinderPage()">✕</button>
       </div>
       <div id="binder-search-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg2);border:1px solid var(--border2);border-radius:0 0 4px 4px;z-index:50;max-height:200px;overflow-y:auto"></div>
     </div>
@@ -551,7 +551,7 @@
               oninput="filterPrintings();toggleClear('modal-card-search','modal-search-clear')"
               onkeydown="if(event.key==='Enter'||event.key==='Go'){event.preventDefault();this.blur();}"
               style="width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:3px;padding:8px 28px 8px 12px;color:var(--text);font-family:var(--mono);font-size:11px;outline:none;letter-spacing:0.08em"/>
-            <button id="modal-search-clear" class="search-clear" onclick="clearSearch('modal-card-search','modal-search-clear');filterPrintings()">✕</button>
+            <button id="modal-search-clear" class="search-clear" onmousedown="event.preventDefault()" onclick="clearSearch('modal-card-search','modal-search-clear');filterPrintings()">✕</button>
           </div>
           <button onclick="document.getElementById('modal-card-search').value+='/';filterPrintings();toggleClear('modal-card-search','modal-search-clear')"
             style="padding:8px 10px;background:var(--bg3);border:1px solid var(--border2);border-radius:3px;color:var(--gold);font-family:var(--mono);font-size:13px;cursor:pointer;flex-shrink:0">/</button>
@@ -731,7 +731,7 @@ function toggleClear(inputId, btnId) {
 
 function clearSearch(inputId, btnId) {
   const input = document.getElementById(inputId);
-  if (input) input.value = '';
+  if (input) { input.value = ''; input.focus(); }
   const btn = document.getElementById(btnId);
   if (btn) btn.classList.remove('visible');
 }
@@ -1077,11 +1077,8 @@ function confirmAdd() {
   addCard(pokeId, { id: cardId, name, image, set, number, rarity: rarity || '', addedAt: Date.now() });
   showToast(name + ' added!', 'success', pokeId);
   renderGrid();
-  // Refresh binder if open so card image appears immediately
+  // Refresh binder page if open — owned check is live so image appears immediately
   if (currentView === 'binder' && binderMode === 'dex') {
-    const cols = parseInt(document.getElementById('binder-cols').value);
-    const rows = parseInt(document.getElementById('binder-rows').value);
-    binderAllSlots = buildDexSlots(cols * rows);
     renderBinderPage();
   }
   if (onConfirm) onConfirm(pokeId, cardId, name, image, set, number);
@@ -1707,7 +1704,7 @@ function buildDexSlots(perPage) {
       const page = pageStart + Math.floor(posInGen / perPage);
       const slot = (posInGen % perPage) + 1;
       const pokemon = pokemonList.find(p => p.id === id) || null;
-      slots.push({ page, slot, pokemon, gen: g, owned: pokemon ? isOwned(id) : false });
+      slots.push({ page, slot, pokemon, gen: g });
     }
   }
   return slots;
@@ -1777,9 +1774,10 @@ function renderBinderPage() {
       }
       const p = slot.pokemon;
       const isHighlighted = binderHighlightId === p.id;
-      const owned = slot.owned;
+      // Always check ownership live so binder updates immediately after adding
+      const owned = isOwned(p.id);
       const dispCard = owned ? (getOwned(p.id).find(c => c.id === getDisplay(p.id)) || getOwned(p.id)[0]) : null;
-      const imgSrc = dispCard?.image || p.sprite;
+      const imgSrc = dispCard?.image || (owned ? p.sprite : p.sprite);
       return `<div class="binder-slot ${owned?'filled':'empty'}"
         onclick="openModal(${p.id})"
         title="${owned ? 'Tap to manage cards' : 'Tap to add a card'}"
