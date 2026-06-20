@@ -188,7 +188,9 @@
   .stats-val { color: var(--gold); }
 
   /* Toast */
-  #toast { position: fixed; bottom: 24px; right: 20px; z-index: 999; padding: 10px 18px; border-radius: 4px; font-size: 10px; letter-spacing: 0.12em; opacity: 0; transform: translateY(10px); transition: all 0.25s; pointer-events: none; }
+  #toast { position: fixed; bottom: 24px; right: 20px; z-index: 999; padding: 10px 14px; border-radius: 4px; font-size: 10px; letter-spacing: 0.12em; opacity: 0; transform: translateY(10px); transition: all 0.25s; pointer-events: none; min-width: 180px; }
+  #toast.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
+  #toast-msg { letter-spacing: 0.12em; }
   #toast.show { opacity: 1; transform: translateY(0); }
   #toast.success { background: #0d1e14; border: 1px solid var(--green); color: var(--green); }
   #toast.error { background: #1e0d0d; border: 1px solid var(--red); color: var(--red); }
@@ -350,7 +352,14 @@
 <!-- Dex View -->
 <div id="dex-view" class="view-section active">
   <div id="search-wrap">
-    <input id="search" type="text" placeholder="Search by name or number..." oninput="renderGrid()"/>
+    <div style="display:flex;gap:8px;align-items:center">
+      <input id="search" type="text" placeholder="Search by name or number..." oninput="renderGrid()" style="flex:1"/>
+      <select id="dex-sort" onchange="renderGrid()" style="background:var(--bg3);border:1px solid var(--border2);border-radius:3px;padding:8px 10px;color:var(--text);font-family:var(--mono);font-size:10px;outline:none;cursor:pointer;flex-shrink:0">
+        <option value="dex">POKÉDEX #</option>
+        <option value="rarity">RARITY ↓</option>
+        <option value="recent">RECENTLY ADDED</option>
+      </select>
+    </div>
   </div>
   <div id="grid"></div>
 </div>
@@ -494,6 +503,12 @@
   </div>
 
   <div style="margin-top:28px">
+    <div class="section-title">APP</div>
+    <button class="btn-secondary" onclick="window.location.reload(true)">CHECK FOR UPDATES</button>
+    <div style="font-size:9px;color:var(--text3);margin-top:8px;letter-spacing:0.08em">Reloads the app to pick up any new updates pushed to GitHub.</div>
+  </div>
+
+  <div style="margin-top:28px">
     <div class="section-title">DANGER ZONE</div>
     <button class="btn-secondary" onclick="clearCardCache()" style="margin-bottom:10px">CLEAR CARD CACHE</button>
     <div style="font-size:9px;color:var(--text3);margin-bottom:16px;letter-spacing:0.08em">Forces fresh fetch next time you open a Pokémon or set. Collection unaffected.</div>
@@ -611,7 +626,11 @@
 </div>
 
 <!-- Toast -->
-<div id="toast"></div>
+<div id="toast">
+  <div id="toast-msg"></div>
+  <div id="toast-binder" style="display:none;margin-top:5px;font-size:9px;color:var(--green);letter-spacing:0.1em"></div>
+  <button id="toast-binder-btn" onclick="goToBinderSlot()" style="display:none;margin-top:6px;padding:4px 10px;font-size:9px;letter-spacing:0.12em;font-family:var(--mono);background:var(--green);color:#000;border:none;border-radius:2px;cursor:pointer;width:100%">GO TO BINDER →</button>
+</div>
 
 <script>
 // ── Storage ──────────────────────────────────────────────────────────────────
@@ -766,13 +785,71 @@ function updateFilterBtn() {
 function setGenFilter(gen) { setGenFilterPanel(gen); }
 function setBinderGenFilter(gen) { setGenFilterPanel(gen); }
 
+// ── Rarity tiers ─────────────────────────────────────────────────────────────
+const RARITY_TIER = {
+  'Special Illustration Rare': 10,
+  'Hyper Rare': 9,
+  'Rare Secret': 9,
+  'Rare Rainbow': 9,
+  'Illustration Rare': 8,
+  'Rare Ultra': 7,
+  'Rare Shining': 7,
+  'Rare Shiny GX': 7,
+  'Rare Shiny': 7,
+  'Rare VMAX': 6,
+  'Rare VSTAR': 6,
+  'Double Rare': 6,
+  'Rare Holo VMAX': 6,
+  'Rare Holo VSTAR': 6,
+  'Rare Holo V': 5,
+  'Rare Holo GX': 5,
+  'Rare Holo EX': 5,
+  'Rare Holo': 4,
+  'Rare': 3,
+  'Uncommon': 2,
+  'Common': 1,
+  'Promo': 4,
+  'Classic Collection': 4,
+};
+
+function getRarityTier(rarity) {
+  if (!rarity) return 0;
+  // Exact match first
+  if (RARITY_TIER[rarity] !== undefined) return RARITY_TIER[rarity];
+  // Partial match
+  for (const [key, val] of Object.entries(RARITY_TIER)) {
+    if (rarity.toLowerCase().includes(key.toLowerCase())) return val;
+  }
+  return 0;
+}
+
+function getPokeMaxRarity(pokeId) {
+  const owned = getOwned(pokeId);
+  if (!owned.length) return 0;
+  return Math.max(...owned.map(c => getRarityTier(c.rarity || '')));
+}
+
 function renderGrid() {
   const q = document.getElementById('search').value.toLowerCase();
-  const filtered = pokemonList.filter(p =>
+  const sortBy = document.getElementById('dex-sort')?.value || 'dex';
+  let filtered = pokemonList.filter(p =>
     (p.name.toLowerCase().includes(q) || String(p.id).includes(q)) &&
     inGen(p.id, activeGen) &&
     passesOwnedFilter(p.id)
   );
+
+  // Apply sort
+  if (sortBy === 'rarity') {
+    filtered = [...filtered].sort((a, b) => getPokeMaxRarity(b.id) - getPokeMaxRarity(a.id));
+  } else if (sortBy === 'recent') {
+    // Sort by most recently added card timestamp if available, else keep dex order
+    filtered = [...filtered].sort((a, b) => {
+      const aTime = getOwned(a.id).reduce((max, c) => Math.max(max, c.addedAt || 0), 0);
+      const bTime = getOwned(b.id).reduce((max, c) => Math.max(max, c.addedAt || 0), 0);
+      return bTime - aTime || a.id - b.id;
+    });
+  }
+  // else 'dex' = natural pokemonList order (already by id)
   const grid = document.getElementById('grid');
   if (filtered.length === 0) {
     grid.innerHTML = '<div class="empty-state">NO RESULTS FOUND</div>';
@@ -893,8 +970,9 @@ function renderPrintings(pokeId, cards) {
     const img = card.images?.small || card.image;
     const safeName = (card.name||'').replace(/'/g,"\\'");
     const safeSet = (card.set?.name||card.setName||'').replace(/'/g,"\\'");
+    const safeRarity = (card.rarity||'').replace(/'/g,"\\'");
     return `<div class="printing ${owned?'owned':''} ${isDisp?'is-display':''}" id="pr-${card.id}"
-      onclick="${owned ? `setDisplayCard('${pokeId}','${card.id}')` : `markOwned('${pokeId}','${card.id}','${safeName}','${img||''}','${safeSet}','${card.number||''}')`}"
+      onclick="${owned ? `setDisplayCard('${pokeId}','${card.id}')` : `markOwned('${pokeId}','${card.id}','${safeName}','${img||''}','${safeSet}','${card.number||''}','${safeRarity}')`}"
       title="${owned ? 'Click to set as display card' : 'Click to add'}">
       ${isDisp ? '<div class="display-badge">DISPLAY</div>' : ''}
       ${!owned ? '<div class="lock-icon">🔒</div>' : ''}
@@ -927,10 +1005,10 @@ function setDisplayCard(pokeId, cardId) {
 }
 
 // ── Confirm modal ─────────────────────────────────────────────────────────────
-let pendingCard = null; // { pokeId, cardId, name, image, set, number, onConfirm }
+let pendingCard = null; // { pokeId, cardId, name, image, set, number, rarity, onConfirm }
 
-function showConfirm(pokeId, cardId, name, image, set, number, onConfirm) {
-  pendingCard = { pokeId, cardId, name, image, set, number, onConfirm };
+function showConfirm(pokeId, cardId, name, image, set, number, onConfirm, rarity='') {
+  pendingCard = { pokeId, cardId, name, image, set, number, rarity, onConfirm };
   const imgEl = document.getElementById('confirm-card-img');
   const placeholder = document.getElementById('confirm-card-img-placeholder');
   if (image) {
@@ -942,15 +1020,15 @@ function showConfirm(pokeId, cardId, name, image, set, number, onConfirm) {
     placeholder.style.display = 'flex';
   }
   document.getElementById('confirm-card-name').textContent = name;
-  document.getElementById('confirm-card-set').textContent = set + (number ? '  •  #' + number : '');
+  document.getElementById('confirm-card-set').textContent = set + (number ? '  •  #' + number : '') + (rarity ? '  •  ' + rarity : '');
   document.getElementById('confirm-overlay').classList.add('open');
 }
 
 function confirmAdd() {
   if (!pendingCard) return;
   const { pokeId, cardId, name, image, set, number, onConfirm } = pendingCard;
-  addCard(pokeId, { id: cardId, name, image, set, number });
-  showToast(name + ' added!', 'success');
+  addCard(pokeId, { id: cardId, name, image, set, number, rarity, addedAt: Date.now() });
+  showToast(name + ' added!', 'success', pokeId);
   renderGrid();
   if (onConfirm) onConfirm(pokeId, cardId, name, image, set, number);
   closeConfirm();
@@ -961,7 +1039,7 @@ function closeConfirm() {
   pendingCard = null;
 }
 
-function markOwned(pokeId, cardId, name, image, set, number) {
+function markOwned(pokeId, cardId, name, image, set, number, rarity='') {
   showConfirm(pokeId, cardId, name, image, set, number, (pid, cid, n, img, s, num) => {
     // Refresh the printing card in the modal
     const el = document.getElementById('pr-' + cid);
@@ -975,7 +1053,7 @@ function markOwned(pokeId, cardId, name, image, set, number) {
       el.insertAdjacentHTML('beforeend', `<button class="remove-btn" onclick="event.stopPropagation();removeCardModal('${pid}','${cid}')">REMOVE</button>`);
     }
     document.getElementById('modal-owned-count').textContent = getOwned(pid).length + ' printing(s) owned';
-  });
+  }, rarity);
 }
 
 function removeCardModal(pokeId, cardId) {
@@ -1749,7 +1827,7 @@ function resetCollection() {
 // ── Quick add and close ───────────────────────────────────────────────────────
 function quickAddAndClose(pokeId, cardId, name, image, setName, number) {
   addCard(parseInt(pokeId), { id: cardId, name, image, set: setName, number });
-  showToast(name + ' added!', 'success');
+  showToast(name + ' added!', 'success', parseInt(pokeId));
   renderGrid();
   _closeModal();
 }
@@ -1808,12 +1886,69 @@ function dl(blob, name) {
 
 // ── Toast ────────────────────────────────────────────────────────────────────
 let toastTimer;
-function showToast(msg, type='success') {
+let toastBinderTarget = null; // { page, pokeId } for GO TO BINDER
+
+function getBinderPosition(pokeId) {
+  const cols = parseInt(document.getElementById('binder-cols')?.value || '3');
+  const rows = parseInt(document.getElementById('binder-rows')?.value || '3');
+  const perPage = cols * rows;
+  // Find which gen
+  let pokeGen = 1;
+  for (let g = 1; g <= 9; g++) {
+    const [min, max] = GEN_RANGES[g];
+    if (pokeId >= min && pokeId <= max) { pokeGen = g; break; }
+  }
+  const offsets = getGenPageOffsets(perPage);
+  const [genMin] = GEN_RANGES[pokeGen];
+  const posInGen = pokeId - genMin;
+  const page = offsets[pokeGen] + Math.floor(posInGen / perPage);
+  const slot = (posInGen % perPage) + 1;
+  return { page, slot, cols, rows };
+}
+
+function showToast(msg, type='success', pokeId=null) {
   const el = document.getElementById('toast');
-  el.textContent = msg;
+  document.getElementById('toast-msg').textContent = msg;
+  const binderEl = document.getElementById('toast-binder');
+  const binderBtn = document.getElementById('toast-binder-btn');
+  toastBinderTarget = null;
+
+  if (pokeId && type === 'success') {
+    try {
+      const { page, slot } = getBinderPosition(pokeId);
+      binderEl.textContent = `📖 Page ${page}, Slot ${slot}`;
+      binderEl.style.display = 'block';
+      binderBtn.style.display = 'block';
+      toastBinderTarget = { page, pokeId };
+    } catch {
+      binderEl.style.display = 'none';
+      binderBtn.style.display = 'none';
+    }
+  } else {
+    binderEl.style.display = 'none';
+    binderBtn.style.display = 'none';
+  }
+
   el.className = 'show ' + type;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { el.className = ''; }, 3000);
+  toastTimer = setTimeout(() => {
+    el.className = '';
+    binderEl.style.display = 'none';
+    binderBtn.style.display = 'none';
+  }, 5000);
+}
+
+function goToBinderSlot() {
+  if (!toastBinderTarget) return;
+  // Clear toast
+  document.getElementById('toast').className = '';
+  // Switch to binder, jump to page, highlight pokemon
+  switchView('binder');
+  setBinderMode('dex');
+  binderHighlightId = toastBinderTarget.pokeId;
+  binderCurrentPage = toastBinderTarget.page;
+  renderBinder();
+  toastBinderTarget = null;
 }
 
 // ── IndexedDB lazy cache ──────────────────────────────────────────────────────
@@ -1953,6 +2088,41 @@ async function loadPokemonList() {
 }
 
 // ── Init ─────────────────────────────────────────────────────────────────────
+async function enrichMissingRarities() {
+  // Find all owned cards missing rarity data
+  const missing = [];
+  Object.entries(collection).forEach(([pokeId, data]) => {
+    (data.owned || []).forEach(card => {
+      if (!card.rarity && card.id) missing.push({ pokeId, card });
+    });
+  });
+  if (missing.length === 0) return;
+
+  const headers = {}; if (apiKey) headers['X-Api-Key'] = apiKey;
+  let enriched = 0;
+
+  for (const { pokeId, card } of missing) {
+    try {
+      const res = await fetch(`${TCG_BASE}/cards/${card.id}`, { headers });
+      if (!res.ok) continue;
+      const data = await res.json();
+      const rarity = data.data?.rarity || '';
+      if (rarity) {
+        card.rarity = rarity;
+        card.addedAt = card.addedAt || Date.now();
+        enriched++;
+      }
+      // Small delay to avoid rate limiting
+      await new Promise(r => setTimeout(r, 80));
+    } catch { continue; }
+  }
+
+  if (enriched > 0) {
+    saveData();
+    renderGrid();
+  }
+}
+
 async function init() {
   loadData();
   loadSetsMeta();
@@ -1960,8 +2130,9 @@ async function init() {
   await loadPokemonList();
   updateDownloadStatusUI();
   maybeShowTipPopup();
-  // Check for new sets after a short delay so app loads first
   setTimeout(checkForNewSets, 5000);
+  // Quietly enrich rarity data for existing cards in background
+  setTimeout(enrichMissingRarities, 8000);
 }
 
 init();
