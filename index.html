@@ -1028,8 +1028,8 @@ function showConfirm(pokeId, cardId, name, image, set, number, onConfirm, rarity
 
 function confirmAdd() {
   if (!pendingCard) return;
-  const { pokeId, cardId, name, image, set, number, onConfirm } = pendingCard;
-  addCard(pokeId, { id: cardId, name, image, set, number, rarity, addedAt: Date.now() });
+  const { pokeId, cardId, name, image, set, number, rarity, onConfirm } = pendingCard;
+  addCard(pokeId, { id: cardId, name, image, set, number, rarity: rarity || '', addedAt: Date.now() });
   showToast(name + ' added!', 'success', pokeId);
   renderGrid();
   if (onConfirm) onConfirm(pokeId, cardId, name, image, set, number);
