@@ -650,6 +650,9 @@
 </div>
 
 <script>
+// Force name rebuild — clear version so loadPokemonList always re-fetches from PokeAPI
+// Remove this line once all users have correct names cached
+localStorage.removeItem('pokemonNameVersion');
 // ── Storage ──────────────────────────────────────────────────────────────────
 const STORAGE_KEY = 'sgc_pokedex_v2';
 const API_KEY_STORAGE = 'sgc_pokemon_api_key';
