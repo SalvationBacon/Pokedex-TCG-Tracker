@@ -894,15 +894,32 @@ async function openModal(pokeId) {
     const headers = {};
     if (apiKey) headers['X-Api-Key'] = apiKey;
 
-    // Check DB cache first (only trust if > 250, meaning pagination completed)
+    // Check DB cache using name index
     let cards = null;
-    const cached = await dbGetAll('cards');
-    const nameLower = p.name.split(' ')[0].toLowerCase().replace(/'/g,'');
-    const fromDB = cached.filter(c => c.name?.toLowerCase().replace(/'/g,'').startsWith(nameLower) && c._source === 'pokemon');
-    if (fromDB.length > 250) {
-      cards = fromDB;
-    } else {
-      // Paginate using totalCount from response
+    if (db) {
+      try {
+        const nameLower = name.toLowerCase().replace(/'/g, '');
+        cards = await new Promise((resolve) => {
+          const tx = db.transaction('cards', 'readonly');
+          const index = tx.objectStore('cards').index('byName');
+          const results = [];
+          // Use cursor on name index with range starting with our name
+          const range = IDBKeyRange.bound(nameLower, nameLower + '\uffff');
+          index.openCursor(range).onsuccess = e => {
+            const cursor = e.target.result;
+            if (cursor) {
+              if (cursor.value._source === 'pokemon') results.push(cursor.value);
+              cursor.continue();
+            } else {
+              resolve(results.length > 0 ? results : null);
+            }
+          };
+        });
+      } catch { cards = null; }
+    }
+
+    if (!cards || cards.length === 0) {
+      // Fetch from API and cache
       cards = [];
       let page = 1;
       let totalCount = null;
@@ -915,11 +932,12 @@ async function openModal(pokeId) {
         if (cards.length >= totalCount || batch.length === 0) break;
         page++;
       }
-      // Save lean version to DB
+      // Save to DB
       const lean = cards.map(c => ({
         id: c.id, name: c.name, number: c.number,
         setId: c.set?.id, setName: c.set?.name,
         image: c.images?.small || null,
+        rarity: c.rarity || '',
         _source: 'pokemon'
       }));
       dbPutBulk('cards', lean);
@@ -1955,7 +1973,7 @@ function goToBinderSlot() {
 
 // ── IndexedDB lazy cache ──────────────────────────────────────────────────────
 const DB_NAME = 'sgc_tcg_db';
-const DB_VERSION = 2; // bumped to force pokemon name refresh
+const DB_VERSION = 3; // bumped to add indexes for faster queries
 let db = null;
 
 async function openDB() {
@@ -1963,10 +1981,14 @@ async function openDB() {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = e => {
       const d = e.target.result;
-      // Clear and recreate pokemon store to fix bad cached names
+      // Recreate pokemon store with fresh names
       if (d.objectStoreNames.contains('pokemon')) d.deleteObjectStore('pokemon');
       d.createObjectStore('pokemon', { keyPath: 'id' });
-      if (!d.objectStoreNames.contains('cards')) d.createObjectStore('cards', { keyPath: 'id' });
+      // Recreate cards store with indexes for fast lookup
+      if (d.objectStoreNames.contains('cards')) d.deleteObjectStore('cards');
+      const cards = d.createObjectStore('cards', { keyPath: 'id' });
+      cards.createIndex('bySetId', 'setId', { unique: false });
+      cards.createIndex('byName', 'nameLower', { unique: false });
       if (!d.objectStoreNames.contains('sets')) d.createObjectStore('sets', { keyPath: 'id' });
     };
     req.onsuccess = e => { db = e.target.result; resolve(); };
@@ -1990,7 +2012,14 @@ function dbPutBulk(store, items) {
   try {
     const tx = db.transaction(store, 'readwrite');
     const os = tx.objectStore(store);
-    items.forEach(item => os.put(item));
+    items.forEach(item => {
+      // Add nameLower for the name index on cards store
+      if (store === 'cards' && item.name) {
+        os.put({ ...item, nameLower: item.name.toLowerCase() });
+      } else {
+        os.put(item);
+      }
+    });
   } catch {}
 }
 
@@ -2273,7 +2302,7 @@ async function startDataDownload() {
           totalCount = data.totalCount || 0;
           const batch = data.data || [];
           if (batch.length === 0) break;
-          const lean = batch.map(c => ({ id: c.id, name: c.name, number: c.number, setId: set.id, setName: set.name, image: c.images?.small || null }));
+          const lean = batch.map(c => ({ id: c.id, name: c.name, number: c.number, setId: set.id, setName: set.name, image: c.images?.small || null, rarity: c.rarity || '' }));
           dbPutBulk('cards', lean);
           setCardsCache[set.id] = (setCardsCache[set.id] || []).concat(batch);
           cards = cards.concat(lean);
