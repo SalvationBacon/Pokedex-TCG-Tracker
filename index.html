@@ -1333,11 +1333,15 @@ function sanitiseNameForAPI(name) {
 
 // For full-name searches (Mr. Mime needs both words)
 function sanitiseFullNameForAPI(name) {
-  // TCG API handles apostrophes fine inside quotes — only strip special symbols
-  return name
+  // First normalise to strip form suffixes (Male, Standard, Galar etc.)
+  // Convert display name back to a slug-like form for normalisation
+  const slug = name.toLowerCase().replace(/ /g, '-').replace(/♀/g, '-f').replace(/♂/g, '-m').replace(/é/g, 'e').replace(/'/g, '');
+  const normalised = normalisePokemonName(slug);
+  // Then strip any remaining special chars for API query
+  return normalised
     .replace(/♀/g, '-F')
     .replace(/♂/g, '-M')
-    .replace(/é/g, 'e'); // Flabébé -> Flabebe
+    .replace(/é/g, 'e');
 }
 
 function findPokeIdFromCardName(cardName) {
