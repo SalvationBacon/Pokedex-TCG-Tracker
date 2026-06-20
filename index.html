@@ -2007,7 +2007,7 @@ function goToBinderSlot() {
 
 // ── IndexedDB lazy cache ──────────────────────────────────────────────────────
 const DB_NAME = 'sgc_tcg_db';
-const DB_VERSION = 5; // force rebuild pokemon store with corrected names
+const DB_VERSION = 6; // rebuild pokemon names with Paradox Pokemon hyphen fixes
 let db = null;
 
 async function openDB() {
@@ -2124,6 +2124,13 @@ const FORM_SUFFIXES = [
 const HYPHEN_NAMES = new Set([
   'jangmo-o','hakamo-o','kommo-o','ho-oh','porygon-z',
   'mr-mime','mr-rime','mime-jr','type-null',
+  // Paradox Pokémon with hyphens
+  'chi-yu','chi-em','chien-pao','ting-lu',
+  'great-tusk','scream-tail','brute-bonnet','flutter-mane',
+  'slither-wing','sandy-shocks','iron-treads','iron-bundle',
+  'iron-hands','iron-jugulis','iron-moth','iron-thorns',
+  'roaring-moon','iron-valiant','walking-wake','iron-leaves',
+  'gouging-fire','raging-bolt','iron-boulder','iron-crown',
 ]);
 
 // Apostrophe restorations
