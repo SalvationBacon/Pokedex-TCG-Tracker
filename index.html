@@ -13,6 +13,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="PokédexTCG">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <style>
   :root {
@@ -470,7 +471,25 @@
 
 <!-- Settings View -->
 <div id="settings-view" class="view-section">
-  <div class="section-title">API CONFIGURATION</div>
+  <div class="section-title">CLOUD SYNC</div>
+  <div id="auth-signed-out">
+    <div style="font-size:10px;color:var(--text2);letter-spacing:0.08em;margin-bottom:12px;line-height:1.6">Sign in to sync your collection across devices. Optional — the app works fully offline without it.</div>
+    <input class="settings-input" id="auth-email" type="email" placeholder="Email" autocomplete="email"/>
+    <input class="settings-input" id="auth-password" type="password" placeholder="Password" autocomplete="current-password" style="margin-top:8px"/>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="btn-primary" onclick="signIn()" style="flex:1">SIGN IN</button>
+      <button class="btn-secondary" onclick="signUp()" style="flex:1">SIGN UP</button>
+    </div>
+    <div id="auth-msg" style="font-size:10px;color:var(--gold);letter-spacing:0.06em;margin-top:8px;min-height:14px"></div>
+  </div>
+  <div id="auth-signed-in" style="display:none">
+    <div style="font-size:11px;color:var(--text);letter-spacing:0.06em">Signed in as <span id="auth-user-email" style="color:var(--gold)"></span></div>
+    <div style="font-size:9px;color:var(--text3);letter-spacing:0.08em;margin-top:4px">Sync status: <span id="sync-status">Synced</span></div>
+    <button class="btn-secondary" onclick="signOut()" style="margin-top:12px">SIGN OUT</button>
+  </div>
+
+  <div style="margin-top:28px">
+    <div class="section-title">API CONFIGURATION</div>
   <label class="settings-label">POKÉMON TCG API KEY — get free key at dev.pokemontcg.io</label>
   <input class="settings-input" id="api-key-input" type="text" placeholder="Paste key here..."/>
   <button class="btn-primary" onclick="saveApiKey()">SAVE KEY</button>
@@ -656,6 +675,21 @@ localStorage.removeItem('pokemonNameVersion');
 // ── Storage ──────────────────────────────────────────────────────────────────
 const STORAGE_KEY = 'sgc_pokedex_v2';
 const API_KEY_STORAGE = 'sgc_pokemon_api_key';
+
+// ── Supabase config ───────────────────────────────────────────────────────────
+// Replace these two values with your project's URL and anon key from Supabase dashboard
+const SUPABASE_URL = 'https://qswjocxnlapjirfgcleg.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_lk5quzn2SU1OKoRF6FKCdg_XSjD2j5S';
+let supabase = null;
+let currentUser = null;
+let syncDebounce = null;
+
+function initSupabase() {
+  if (SUPABASE_URL === 'YOUR_SUPABASE_URL' || !window.supabase) return;
+  try {
+    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  } catch { supabase = null; }
+}
 const TOTAL = 1025;
 const TCG_BASE = 'https://api.pokemontcg.io/v2';
 const POKEAPI_BASE = 'https://pokeapi.co/api/v2';
@@ -674,7 +708,56 @@ function loadData() {
   apiKey = localStorage.getItem(API_KEY_STORAGE) || '';
   document.getElementById('api-key-input').value = apiKey;
 }
-function saveData() { localStorage.setItem(STORAGE_KEY, JSON.stringify(collection)); }
+function saveData() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(collection));
+  // Debounced cloud sync if signed in
+  if (currentUser && supabase) {
+    clearTimeout(syncDebounce);
+    syncDebounce = setTimeout(pushToCloud, 1500);
+  }
+}
+
+// ── Cloud sync ────────────────────────────────────────────────────────────────
+async function pushToCloud() {
+  if (!currentUser || !supabase) return;
+  try {
+    await supabase.from('collections').upsert({
+      user_id: currentUser.id,
+      data: collection,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'user_id' });
+    updateSyncStatus('Synced');
+  } catch {
+    updateSyncStatus('Sync failed');
+  }
+}
+
+async function pullFromCloud() {
+  if (!currentUser || !supabase) return;
+  try {
+    const { data, error } = await supabase
+      .from('collections')
+      .select('data, updated_at')
+      .eq('user_id', currentUser.id)
+      .maybeSingle();
+    if (error || !data) return; // no cloud data yet
+    // Last-write-wins: cloud data replaces local
+    if (data.data && typeof data.data === 'object') {
+      collection = data.data;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(collection));
+      renderGrid();
+      updateProgress();
+      updateSyncStatus('Synced');
+    }
+  } catch {
+    updateSyncStatus('Sync failed');
+  }
+}
+
+function updateSyncStatus(text) {
+  const el = document.getElementById('sync-status');
+  if (el) el.textContent = text;
+}
 
 // ── Collection helpers ───────────────────────────────────────────────────────
 function getOwned(id) { return collection[id]?.owned || []; }
@@ -1828,14 +1911,48 @@ function renderBinderPage() {
       if (!slot) return `<div class="binder-slot empty"><div class="binder-slot-num">—</div></div>`;
       const { card, owned } = slot;
       const img = card.image || card.images?.small;
-      return `<div class="binder-slot ${owned?'filled':'empty'}">
-        ${owned ? '<div class="binder-slot-owned-dot"></div>' : ''}
+      const safeName = (card.name||'').replace(/'/g,"\\'");
+      const safeSet = (binderSelectedSet?.name||'').replace(/'/g,"\\'");
+      const pokeId = findPokeIdFromCardName(card.name);
+      return `<div class="binder-slot ${owned?'filled':'empty'}"
+        onclick="toggleSetBinderCard('${card.id}','${safeName}','${img||''}','${safeSet}','${card.number||''}','${(card.rarity||'').replace(/'/g,"\\'")}',${pokeId||'null'})"
+        title="${owned ? 'Tap to remove' : 'Tap to add'}"
+        style="cursor:pointer">
+        ${owned ? '<div class="binder-slot-owned-dot"></div>' : '<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:16px;opacity:0.3">＋</div>'}
         ${img ? `<img src="${img}" alt="${card.name}" loading="lazy" style="${owned?'':'filter:grayscale(1) brightness(0.3)'}" onerror="this.style.display='none'">` : ''}
         <div class="binder-slot-name">${card.name}</div>
         <div class="binder-slot-num">#${card.number||'?'}</div>
       </div>`;
     }).join('');
   }
+}
+
+function toggleSetBinderCard(cardId, name, image, setName, number, rarity, pokeId) {
+  const targetId = pokeId || '_misc';
+  // Check if already owned
+  const owned = (collection[targetId]?.owned || []).some(c => c.id === cardId);
+  if (owned) {
+    // Remove
+    if (collection[targetId]) {
+      collection[targetId].owned = collection[targetId].owned.filter(c => c.id !== cardId);
+      saveData();
+    }
+    showToast(name + ' removed', 'error');
+  } else {
+    // Add
+    if (pokeId) {
+      addCard(pokeId, { id: cardId, name, image, set: setName, number, rarity: rarity||'', addedAt: Date.now() });
+    } else {
+      if (!collection['_misc']) collection['_misc'] = { owned: [], display: null };
+      collection['_misc'].owned.push({ id: cardId, name, image, set: setName, number, rarity: rarity||'' });
+      saveData();
+    }
+    showToast(name + ' added!', 'success', pokeId || null);
+  }
+  renderGrid();
+  // Re-render the binder set view
+  binderSelectedSet.cards = setCardsCache[binderSelectedSet.id];
+  renderBinderPage();
 }
 
 function renderBinder() {
@@ -1878,6 +1995,85 @@ document.addEventListener('DOMContentLoaded', () => {
   }, { passive: true });
 });
 
+
+// ── Auth ──────────────────────────────────────────────────────────────────────
+async function signUp() {
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  if (!email || !password) { setAuthMsg('Enter email and password'); return; }
+  if (!supabase) { setAuthMsg('Cloud sync not configured'); return; }
+  setAuthMsg('Creating account...');
+  const { data, error } = await supabase.auth.signUp({ email, password });
+  if (error) { setAuthMsg(error.message); return; }
+  if (data.user && !data.session) {
+    setAuthMsg('Check your email to confirm your account, then sign in.');
+  } else {
+    setAuthMsg('');
+    onSignedIn(data.user);
+  }
+}
+
+async function signIn() {
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  if (!email || !password) { setAuthMsg('Enter email and password'); return; }
+  if (!supabase) { setAuthMsg('Cloud sync not configured'); return; }
+  setAuthMsg('Signing in...');
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) { setAuthMsg(error.message); return; }
+  setAuthMsg('');
+  onSignedIn(data.user);
+}
+
+async function signOut() {
+  if (!supabase) return;
+  await supabase.auth.signOut();
+  currentUser = null;
+  renderAuthUI();
+  showToast('Signed out', 'success');
+}
+
+async function onSignedIn(user) {
+  currentUser = user;
+  renderAuthUI();
+  // Pull cloud data (last-write-wins). If cloud is empty, push local up.
+  const { data } = await supabase.from('collections').select('data').eq('user_id', user.id).maybeSingle();
+  if (data && data.data && Object.keys(data.data).length > 0) {
+    await pullFromCloud();
+  } else {
+    await pushToCloud(); // seed cloud with local collection
+  }
+  showToast('Signed in — collection synced', 'success');
+}
+
+function setAuthMsg(msg) {
+  const el = document.getElementById('auth-msg');
+  if (el) el.textContent = msg;
+}
+
+function renderAuthUI() {
+  const signedOut = document.getElementById('auth-signed-out');
+  const signedIn = document.getElementById('auth-signed-in');
+  if (!signedOut || !signedIn) return;
+  if (currentUser) {
+    signedOut.style.display = 'none';
+    signedIn.style.display = 'block';
+    document.getElementById('auth-user-email').textContent = currentUser.email;
+  } else {
+    signedOut.style.display = 'block';
+    signedIn.style.display = 'none';
+  }
+}
+
+async function checkExistingSession() {
+  if (!supabase) return;
+  const { data } = await supabase.auth.getSession();
+  if (data.session?.user) {
+    currentUser = data.session.user;
+    renderAuthUI();
+    await pullFromCloud();
+  }
+}
 
 function saveApiKey() {
   apiKey = document.getElementById('api-key-input').value.trim();
@@ -2274,11 +2470,14 @@ async function loadPokemonList() {
 async function init() {
   loadData();
   loadSetsMeta();
+  initSupabase();
+  renderAuthUI();
   await openDB();
   await loadPokemonList();
   updateDownloadStatusUI();
   maybeShowTipPopup();
   setTimeout(checkForNewSets, 5000);
+  checkExistingSession();
 }
 
 init();
