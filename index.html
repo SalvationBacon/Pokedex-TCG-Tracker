@@ -13,7 +13,6 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="PokédexTCG">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <style>
   :root {
@@ -680,15 +679,29 @@ const API_KEY_STORAGE = 'sgc_pokemon_api_key';
 // Replace these two values with your project's URL and anon key from Supabase dashboard
 const SUPABASE_URL = 'https://qswjocxnlapjirfgcleg.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_lk5quzn2SU1OKoRF6FKCdg_XSjD2j5S';
-let supabase = null;
+let sb = null;
 let currentUser = null;
 let syncDebounce = null;
 
 function initSupabase() {
-  if (SUPABASE_URL === 'YOUR_SUPABASE_URL' || !window.supabase) return;
-  try {
-    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  } catch { supabase = null; }
+  if (SUPABASE_URL === 'YOUR_SUPABASE_URL') return;
+  // Load the SDK dynamically so it never blocks app startup
+  if (window.supabase) {
+    try { sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); renderAuthUI(); checkExistingSession(); } catch(e) { console.warn('Supabase init failed', e); }
+    return;
+  }
+  const script = document.createElement('script');
+  script.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
+  script.async = true;
+  script.onload = () => {
+    try {
+      sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      renderAuthUI();
+      checkExistingSession();
+    } catch(e) { console.warn('Supabase init failed', e); }
+  };
+  script.onerror = () => console.warn('Supabase SDK failed to load — cloud sync unavailable');
+  document.head.appendChild(script);
 }
 const TOTAL = 1025;
 const TCG_BASE = 'https://api.pokemontcg.io/v2';
@@ -711,7 +724,7 @@ function loadData() {
 function saveData() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(collection));
   // Debounced cloud sync if signed in
-  if (currentUser && supabase) {
+  if (currentUser && sb) {
     clearTimeout(syncDebounce);
     syncDebounce = setTimeout(pushToCloud, 1500);
   }
@@ -719,9 +732,9 @@ function saveData() {
 
 // ── Cloud sync ────────────────────────────────────────────────────────────────
 async function pushToCloud() {
-  if (!currentUser || !supabase) return;
+  if (!currentUser || !sb) return;
   try {
-    await supabase.from('collections').upsert({
+    await sb.from('collections').upsert({
       user_id: currentUser.id,
       data: collection,
       updated_at: new Date().toISOString()
@@ -733,9 +746,9 @@ async function pushToCloud() {
 }
 
 async function pullFromCloud() {
-  if (!currentUser || !supabase) return;
+  if (!currentUser || !sb) return;
   try {
-    const { data, error } = await supabase
+    const { data, error } = await sb
       .from('collections')
       .select('data, updated_at')
       .eq('user_id', currentUser.id)
@@ -2001,9 +2014,9 @@ async function signUp() {
   const email = document.getElementById('auth-email').value.trim();
   const password = document.getElementById('auth-password').value;
   if (!email || !password) { setAuthMsg('Enter email and password'); return; }
-  if (!supabase) { setAuthMsg('Cloud sync not configured'); return; }
+  if (!sb) { setAuthMsg('Cloud sync not configured'); return; }
   setAuthMsg('Creating account...');
-  const { data, error } = await supabase.auth.signUp({ email, password });
+  const { data, error } = await sb.auth.signUp({ email, password });
   if (error) { setAuthMsg(error.message); return; }
   if (data.user && !data.session) {
     setAuthMsg('Check your email to confirm your account, then sign in.');
@@ -2017,17 +2030,17 @@ async function signIn() {
   const email = document.getElementById('auth-email').value.trim();
   const password = document.getElementById('auth-password').value;
   if (!email || !password) { setAuthMsg('Enter email and password'); return; }
-  if (!supabase) { setAuthMsg('Cloud sync not configured'); return; }
+  if (!sb) { setAuthMsg('Cloud sync not configured'); return; }
   setAuthMsg('Signing in...');
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
   if (error) { setAuthMsg(error.message); return; }
   setAuthMsg('');
   onSignedIn(data.user);
 }
 
 async function signOut() {
-  if (!supabase) return;
-  await supabase.auth.signOut();
+  if (!sb) return;
+  await sb.auth.signOut();
   currentUser = null;
   renderAuthUI();
   showToast('Signed out', 'success');
@@ -2037,7 +2050,7 @@ async function onSignedIn(user) {
   currentUser = user;
   renderAuthUI();
   // Pull cloud data (last-write-wins). If cloud is empty, push local up.
-  const { data } = await supabase.from('collections').select('data').eq('user_id', user.id).maybeSingle();
+  const { data } = await sb.from('collections').select('data').eq('user_id', user.id).maybeSingle();
   if (data && data.data && Object.keys(data.data).length > 0) {
     await pullFromCloud();
   } else {
@@ -2066,8 +2079,8 @@ function renderAuthUI() {
 }
 
 async function checkExistingSession() {
-  if (!supabase) return;
-  const { data } = await supabase.auth.getSession();
+  if (!sb) return;
+  const { data } = await sb.auth.getSession();
   if (data.session?.user) {
     currentUser = data.session.user;
     renderAuthUI();
@@ -2470,14 +2483,12 @@ async function loadPokemonList() {
 async function init() {
   loadData();
   loadSetsMeta();
-  initSupabase();
-  renderAuthUI();
+  try { initSupabase(); renderAuthUI(); } catch(e) { console.warn('Supabase init skipped:', e); }
   await openDB();
   await loadPokemonList();
   updateDownloadStatusUI();
   maybeShowTipPopup();
   setTimeout(checkForNewSets, 5000);
-  checkExistingSession();
 }
 
 init();
